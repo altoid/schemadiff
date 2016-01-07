@@ -34,12 +34,9 @@ class TestBasic(unittest.TestCase):
   `imageUrl` varchar(255) DEFAULT NULL,
   `author` varchar(128) DEFAULT NULL,
   `objectProductOverrideId` bigint(20) NOT NULL,
-  `createDate` datetime NOT NULL,
-  PRIMARY KEY (`objectProductOverrideId`),
-  KEY `idx_oopp` (`objectId`,`objectType`,`productId`,`partnerId`),
-  KEY `idx_p` (`partnerId`)
+  `createDate` datetime NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8"""
-        self.assertEquals('504018a9e2d5f90067f4c3fb58d6055fcaa9dd4c', schemadiff.shacmd(schemadiff.normalize(s)))
+        self.assertEquals('c9469713b047c274bd828de8f4437858070133a6', schemadiff.shacmd(schemadiff.normalize(s)))
 
 
 class TestSetup(unittest.TestCase):
@@ -114,10 +111,7 @@ class TestTableDiff(unittest.TestCase):
   `imageUrl` varchar(255) DEFAULT NULL,
   `author` varchar(128) DEFAULT NULL,
   `objectProductOverrideId` bigint(20) NOT NULL,
-  `createDate` datetime NOT NULL,
-  PRIMARY KEY (`objectProductOverrideId`),
-  KEY `idx_oopp` (`objectId`,`objectType`,`productId`,`partnerId`),
-  KEY `idx_p` (`partnerId`)
+  `createDate` datetime NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
 
         self.cursor.execute("use %s" % self.db1)
@@ -144,17 +138,12 @@ class TestTableDiff(unittest.TestCase):
         t1 = """CREATE TABLE `%(table)s` (
   `objectType` int(11) NOT NULL,
   `objectId` bigint(20) NOT NULL,
-  `deleteDate` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`objectType`,`objectId`),
-  KEY `idx_deleteDate` (`deleteDate`),
-  KEY `idx_objectType_deleteDate` (`objectType`,`deleteDate`)
+  `deleteDate` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
 
         t2 = """CREATE TABLE `%(table)s` (
   `objectType` int(11) NOT NULL,
-  `deleteDate` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  KEY `idx_deleteDate` (`deleteDate`),
-  KEY `idx_objectType_deleteDate` (`objectType`,`deleteDate`)
+  `deleteDate` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
 
         self.cursor.execute("use %s" % self.db1)
@@ -172,7 +161,11 @@ class TestTableDiff(unittest.TestCase):
 
         self.assertTrue(len(drop) > 0)
         dml = schemadiff.construct_altertable(self.cursor, self.db1, self.db2, tableName, drop, add, diffs)
-        print dml
+        control = "ALTER TABLE %(db)s.%(table)s DROP COLUMN objectId" % {
+            "db" : self.db1,
+            "table" : tableName
+            }
+        self.assertEqual(control, dml)
 
     def testChange1Column(self):
         tableName = 'deletedObject'
@@ -180,19 +173,13 @@ class TestTableDiff(unittest.TestCase):
         t1 = """CREATE TABLE `%(table)s` (
   `objectType` int(11) NOT NULL,
   `objectId` bigint(20) NOT NULL,
-  `deleteDate` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`objectType`,`objectId`),
-  KEY `idx_deleteDate` (`deleteDate`),
-  KEY `idx_objectType_deleteDate` (`objectType`,`deleteDate`)
+  `deleteDate` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
 
         t2 = """CREATE TABLE `%(table)s` (
   `objectType` smallint NOT NULL,
   `objectId` bigint(20) NOT NULL,
-  `deleteDate` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`objectType`,`objectId`),
-  KEY `idx_deleteDate` (`deleteDate`),
-  KEY `idx_objectType_deleteDate` (`objectType`,`deleteDate`)
+  `deleteDate` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
 
         self.cursor.execute("use %s" % self.db1)
@@ -210,7 +197,11 @@ class TestTableDiff(unittest.TestCase):
 
         self.assertTrue(len(diffs) > 0)
         dml = schemadiff.construct_altertable(self.cursor, self.db1, self.db2, tableName, drop, add, diffs)
-        print dml
+        control = "ALTER TABLE %(db)s.%(table)s MODIFY COLUMN objectType smallint NOT NULL" % {
+            "db" : self.db1,
+            "table" : tableName
+            }
+        self.assertEqual(control, dml)
 
     def testMakeColumnNullable(self):
         tableName = 'deletedObject'
@@ -218,18 +209,13 @@ class TestTableDiff(unittest.TestCase):
         t1 = """CREATE TABLE `%(table)s` (
   `objectType` int(11) NOT NULL,
   `objectId` bigint(20) NOT NULL,
-  `deleteDate` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`objectType`,`objectId`),
-  KEY `idx_deleteDate` (`deleteDate`),
-  KEY `idx_objectType_deleteDate` (`objectType`,`deleteDate`)
+  `deleteDate` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
 
         t2 = """CREATE TABLE `%(table)s` (
   `objectType` int(11),
   `objectId` bigint(20) NOT NULL,
-  `deleteDate` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  KEY `idx_deleteDate` (`deleteDate`),
-  KEY `idx_objectType_deleteDate` (`objectType`,`deleteDate`)
+  `deleteDate` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
 
         self.cursor.execute("use %s" % self.db1)
@@ -247,7 +233,11 @@ class TestTableDiff(unittest.TestCase):
 
         self.assertTrue(len(diffs) > 0)
         dml = schemadiff.construct_altertable(self.cursor, self.db1, self.db2, tableName, drop, add, diffs)
-        print dml
+        control = "ALTER TABLE %(db)s.%(table)s MODIFY COLUMN objectType int NULL" % {
+            "db" : self.db1,
+            "table" : tableName
+            }
+        self.assertEqual(control, dml)
                                                    
     def testMakeColumnNotNull(self):
         tableName = 'deletedObject'
@@ -255,17 +245,13 @@ class TestTableDiff(unittest.TestCase):
         t1 = """CREATE TABLE `%(table)s` (
   `objectType` int(11),
   `objectId` bigint(20) NOT NULL,
-  `deleteDate` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  KEY `idx_deleteDate` (`deleteDate`),
-  KEY `idx_objectType_deleteDate` (`objectType`,`deleteDate`)
+  `deleteDate` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
 
         t2 = """CREATE TABLE `%(table)s` (
   `objectType` int(11) NOT NULL,
   `objectId` bigint(20) NOT NULL,
-  `deleteDate` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  KEY `idx_deleteDate` (`deleteDate`),
-  KEY `idx_objectType_deleteDate` (`objectType`,`deleteDate`)
+  `deleteDate` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
 
         self.cursor.execute("use %s" % self.db1)
@@ -283,25 +269,24 @@ class TestTableDiff(unittest.TestCase):
 
         self.assertTrue(len(diffs) > 0)
         dml = schemadiff.construct_altertable(self.cursor, self.db1, self.db2, tableName, drop, add, diffs)
-        print dml
+        control = "ALTER TABLE %(db)s.%(table)s MODIFY COLUMN objectType int NOT NULL" % {
+            "db" : self.db1,
+            "table" : tableName
+            }
+        self.assertEqual(control, dml)
                                                    
     def testAdd1Column(self):
         tableName = 'deletedObject'
 
         t1 = """CREATE TABLE `%(table)s` (
   `objectType` int(11) NOT NULL,
-  `deleteDate` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  KEY `idx_deleteDate` (`deleteDate`),
-  KEY `idx_objectType_deleteDate` (`objectType`,`deleteDate`)
+  `deleteDate` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
 
         t2 = """CREATE TABLE `%(table)s` (
   `objectType` int(11) NOT NULL,
   `objectId` bigint(20) NOT NULL,
-  `deleteDate` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`objectType`,`objectId`),
-  KEY `idx_deleteDate` (`deleteDate`),
-  KEY `idx_objectType_deleteDate` (`objectType`,`deleteDate`)
+  `deleteDate` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
 
         self.cursor.execute("use %s" % self.db1)
@@ -331,17 +316,13 @@ class TestTableDiff(unittest.TestCase):
 
         t1 = """CREATE TABLE `%(table)s` (
   `objectType` int(11) NOT NULL,
-  `deleteDate` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  KEY `idx_deleteDate` (`deleteDate`),
-  KEY `idx_objectType_deleteDate` (`objectType`,`deleteDate`)
+  `deleteDate` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
 
         t2 = """CREATE TABLE `%(table)s` (
   `objectType` int(11) NOT NULL,
   `objectId` bigint(20),
-  `deleteDate` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  KEY `idx_deleteDate` (`deleteDate`),
-  KEY `idx_objectType_deleteDate` (`objectType`,`deleteDate`)
+  `deleteDate` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
 
         self.cursor.execute("use %s" % self.db1)
@@ -374,17 +355,13 @@ class TestTableDiff(unittest.TestCase):
         t1 = """CREATE TABLE `%(table)s` (
   `objectType` int(11) NOT NULL,
   `objectId` bigint(20) NOT NULL,
-  `deleteDate` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`objectType`,`objectId`),
-  KEY `idx_deleteDate` (`deleteDate`),
-  KEY `idx_objectType_deleteDate` (`objectType`,`deleteDate`)
+  `deleteDate` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
 
         t2 = """CREATE TABLE `%(table)s` (
   `deleteDate` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   `objectType` smallint(6) unsigned NOT NULL,
-  `objectNamespaceAndId` bigint(20) NOT NULL,
-  PRIMARY KEY (`deleteDate`,`objectType`,`objectNamespaceAndId`)
+  `objectNamespaceAndId` bigint(20) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
 
         self.cursor.execute("use %s" % self.db1)
@@ -405,7 +382,14 @@ class TestTableDiff(unittest.TestCase):
         self.assertTrue(len(diffs) > 0)
 
         dml = schemadiff.construct_altertable(self.cursor, self.db1, self.db2, tableName, drop, add, diffs)
-        print dml
+        control = ("ALTER TABLE %(db)s.%(table)s "
+                   "DROP COLUMN objectId, "
+                   "ADD COLUMN objectNamespaceAndId bigint NOT NULL, "
+                   "MODIFY COLUMN objectType smallint NOT NULL") % {
+            "db" : self.db1,
+            "table" : tableName
+            }
+        self.assertEqual(control, dml)
 
     def tearDown(self):
 #        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db1 })

@@ -165,7 +165,6 @@ def construct_altertable(cursor, fromdb, todb, table, drop, add, diffs):
                         })
 
     if diffs is not None:
-        print diffs
         for k in diffs.keys():
             clause = "MODIFY COLUMN %(column)s %(datatype)s" % {
                 "column" : k,
