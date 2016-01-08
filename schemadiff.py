@@ -3,6 +3,7 @@
 import MySQLdb
 # docs at http://mysql-python.sourceforge.net/MySQLdb.html
 
+import re
 import sys
 import pprint
 import argparse
@@ -63,17 +64,15 @@ def normalize(s):
 """
     p2 = subprocess.check_output(filtercmd, stdin=p1.stdout, shell=True)
     p1.stdout.close()
-    p2 = p2.strip()
+    p2 = re.sub(r'[^\w]', '', p2)
     return p2
 
 def shacmd(s):
-    echo = ['echo', s]
-    p1 = subprocess.Popen(echo, stdout=subprocess.PIPE)
-    p2 = subprocess.check_output("shasum | cut -f 1 -d' ' | tr -d '\n'", stdin=p1.stdout, shell=True)
-    p1.stdout.close()
-    return p2
+    hash = hashlib.sha1()
+    hash.update(s)
+    return hash.hexdigest()
 
-def dbchecksum(dbname):
+def dbdump(dbname):
     dumpcmd = "mysqldump -u %(user)s -p%(passwd)s --no-data %(dbname)s" % {
         "user" : dsn.user,
         "passwd" : dsn.passwd,
@@ -82,14 +81,16 @@ def dbchecksum(dbname):
 
     # suppress warnings from mysqldump.  i know, i know.
     with open(os.devnull, 'w') as devnull:
-        output = subprocess.check_output(dumpcmd, stderr=devnull, shell=True)
-    return shacmd(normalize(output))
+        return subprocess.check_output(dumpcmd, stderr=devnull, shell=True)
+
+def dbchecksum(dbname):
+    return shacmd(normalize(dbdump(dbname)))
 
 def diff_column(cursor, table, column, db1, db2):
     # TODO:  handle column default values
     # TODO:  timestamp columns with specifiers
 
-    metadata_columns = ['data_type', 'is_nullable']
+    metadata_columns = ['column_type', 'is_nullable']
     query = """
  select %(metadata_columns)s
  from information_schema.columns
@@ -141,7 +142,7 @@ def construct_altertable(cursor, fromdb, todb, table, drop, add, diffs):
     if add is not None:
         addcolumns = ',\''.join(add)
         sql = """
- select column_name, data_type, is_nullable
+ select column_name, column_type, is_nullable
  from information_schema.columns
  where table_schema = '%(db)s' and
  table_name = '%(table)s' and
@@ -151,24 +152,24 @@ def construct_altertable(cursor, fromdb, todb, table, drop, add, diffs):
             "columns" : addcolumns }
         cursor.execute(sql)
         for row in cursor.fetchall():
-            d1 = dict(zip(['column_name', 'data_type', 'is_nullable'],
+            d1 = dict(zip(['column_name', 'column_type', 'is_nullable'],
                       row))
             if d1['is_nullable'] == 'NO':
                 clauses.append("ADD COLUMN %(colname)s %(data_type)s NOT NULL" % {
                         "colname" : d1['column_name'],
-                        "data_type" : d1['data_type']
+                        "data_type" : d1['column_type']
                         })
             else:
                 clauses.append("ADD COLUMN %(colname)s %(data_type)s" % {
                         "colname" : d1['column_name'],
-                        "data_type" : d1['data_type']
+                        "data_type" : d1['column_type']
                         })
 
     if diffs is not None:
         for k in diffs.keys():
             clause = "MODIFY COLUMN %(column)s %(datatype)s" % {
                 "column" : k,
-                "datatype" : diffs[k]['data_type']
+                "datatype" : diffs[k]['column_type']
                 }
             if 'is_nullable' in diffs[k]:
                 if diffs[k]['is_nullable'] == 'NO':

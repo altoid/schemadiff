@@ -1,0 +1,4 @@
+crontab
+**/*~
+dsn.*
+**/*.pyc

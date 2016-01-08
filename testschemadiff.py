@@ -9,6 +9,7 @@ import os
 import string
 import unittest
 import schemadiff
+import hashlib
 import dsn
 from warnings import filterwarnings
 
@@ -18,7 +19,7 @@ class TestBasic(unittest.TestCase):
         result = schemadiff.normalize('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789')
         self.assertEqual('abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz0123456789', result)
         result = schemadiff.shacmd(result)
-        self.assertEqual('4dcd4f08ed97c050a52da10eb3eeaf1d9b28a9d3', result)
+        self.assertEqual('106d564d4ccd3ce4dc111457baf36f99ba634d45', result)
 
     def test_basic(self):
         s = """CREATE TABLE `objectProductOverride` (
@@ -36,7 +37,7 @@ class TestBasic(unittest.TestCase):
   `objectProductOverrideId` bigint(20) NOT NULL,
   `createDate` datetime NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8"""
-        self.assertEquals('c9469713b047c274bd828de8f4437858070133a6', schemadiff.shacmd(schemadiff.normalize(s)))
+        self.assertEquals('6ab29987db01aeeecad2beedbc02774526194c54', schemadiff.shacmd(schemadiff.normalize(s)))
 
 
 class TestSetup(unittest.TestCase):
@@ -80,8 +81,8 @@ class TestSetup(unittest.TestCase):
 
 class TestTableDiff(unittest.TestCase):
 
-    db1 = 'schemadiff_tablediff_old'
-    db2 = 'schemadiff_tablediff_new'
+    db1 = 'schemadiff_testtablediff_old'
+    db2 = 'schemadiff_testtablediff_new'
     dbconn = None
     cursor = None
 
@@ -197,7 +198,7 @@ class TestTableDiff(unittest.TestCase):
 
         self.assertTrue(len(diffs) > 0)
         dml = schemadiff.construct_altertable(self.cursor, self.db1, self.db2, tableName, drop, add, diffs)
-        control = "ALTER TABLE %(db)s.%(table)s MODIFY COLUMN objectType smallint NOT NULL" % {
+        control = "ALTER TABLE %(db)s.%(table)s MODIFY COLUMN objectType smallint(6) NOT NULL" % {
             "db" : self.db1,
             "table" : tableName
             }
@@ -233,7 +234,7 @@ class TestTableDiff(unittest.TestCase):
 
         self.assertTrue(len(diffs) > 0)
         dml = schemadiff.construct_altertable(self.cursor, self.db1, self.db2, tableName, drop, add, diffs)
-        control = "ALTER TABLE %(db)s.%(table)s MODIFY COLUMN objectType int NULL" % {
+        control = "ALTER TABLE %(db)s.%(table)s MODIFY COLUMN objectType int(11) NULL" % {
             "db" : self.db1,
             "table" : tableName
             }
@@ -269,7 +270,7 @@ class TestTableDiff(unittest.TestCase):
 
         self.assertTrue(len(diffs) > 0)
         dml = schemadiff.construct_altertable(self.cursor, self.db1, self.db2, tableName, drop, add, diffs)
-        control = "ALTER TABLE %(db)s.%(table)s MODIFY COLUMN objectType int NOT NULL" % {
+        control = "ALTER TABLE %(db)s.%(table)s MODIFY COLUMN objectType int(11) NOT NULL" % {
             "db" : self.db1,
             "table" : tableName
             }
@@ -304,7 +305,7 @@ class TestTableDiff(unittest.TestCase):
 
         self.assertTrue(len(add) > 0)
         dml = schemadiff.construct_altertable(self.cursor, self.db1, self.db2, tableName, drop, add, diffs)
-        control = "ALTER TABLE %(db)s.%(table)s ADD COLUMN objectId bigint NOT NULL" % {
+        control = "ALTER TABLE %(db)s.%(table)s ADD COLUMN objectId bigint(20) NOT NULL" % {
             "db" : self.db1,
             "table" : tableName
             }
@@ -340,7 +341,7 @@ class TestTableDiff(unittest.TestCase):
 
         self.assertTrue(len(add) > 0)
         dml = schemadiff.construct_altertable(self.cursor, self.db1, self.db2, tableName, drop, add, diffs)
-        control = "ALTER TABLE %(db)s.%(table)s ADD COLUMN objectId bigint" % {
+        control = "ALTER TABLE %(db)s.%(table)s ADD COLUMN objectId bigint(20)" % {
             "db" : self.db1,
             "table" : tableName
             }
@@ -384,22 +385,144 @@ class TestTableDiff(unittest.TestCase):
         dml = schemadiff.construct_altertable(self.cursor, self.db1, self.db2, tableName, drop, add, diffs)
         control = ("ALTER TABLE %(db)s.%(table)s "
                    "DROP COLUMN objectId, "
-                   "ADD COLUMN objectNamespaceAndId bigint NOT NULL, "
-                   "MODIFY COLUMN objectType smallint NOT NULL") % {
+                   "ADD COLUMN objectNamespaceAndId bigint(20) NOT NULL, "
+                   "MODIFY COLUMN objectType smallint(6) unsigned NOT NULL") % {
             "db" : self.db1,
             "table" : tableName
             }
         self.assertEqual(control, dml)
 
     def tearDown(self):
-#        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db1 })
-#        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db2 })
-#
-#        self.cursor.close()
-#        self.dbconn.close()
-        pass
-    
+        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db1 })
+        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db2 })
 
+        self.cursor.close()
+        self.dbconn.close()
+    
+class TestAlterTable(unittest.TestCase):
+    """
+    these tests actually execute the alter table statement that is generated.
+    """
+
+    db1 = 'schemadiff_testaltertable_old'
+    db2 = 'schemadiff_testaltertable_new'
+    dbconn = None
+    cursor = None
+
+    def setUp(self):
+        self.dbconn = dsn.getConnection()
+        self.cursor = self.dbconn.cursor()
+
+        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db1 })
+        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db2 })
+        self.cursor.execute("create database %(db)s" % { "db" : self.db1 })
+        self.cursor.execute("create database %(db)s" % { "db" : self.db2 })
+
+    def testAdd1Column(self):
+        tableName = 'stupidTable'
+
+        t1 = """CREATE TABLE `%(table)s` (
+  `objectType` int(11) NOT NULL,
+  `deleteDate` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
+
+        t2 = """CREATE TABLE `%(table)s` (
+  `objectType` int(11) NOT NULL,
+  `objectId` bigint(20),
+  `deleteDate` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
+
+        self.cursor.execute("use %s" % self.db1)
+        self.cursor.execute(t1)
+
+        self.cursor.execute("use %s" % self.db2)
+        self.cursor.execute(t2)
+
+        (drop, add, diffs) = schemadiff.diff_table(
+            self.cursor, tableName, self.db1, self.db2)
+
+        dml = schemadiff.construct_altertable(self.cursor, self.db1, self.db2, tableName, drop, add, diffs)
+        self.cursor.execute(dml)
+
+        cs1 = schemadiff.dbchecksum(self.db1)
+        cs2 = schemadiff.dbchecksum(self.db2)
+        self.assertEqual(cs1, cs2)
+
+    def testDrop1Column(self):
+        tableName = 'stupidTable'
+
+        t1 = """CREATE TABLE `%(table)s` (
+  `objectType` int(11) NOT NULL,
+  `objectId` bigint(20),
+  `deleteDate` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
+
+        t2 = """CREATE TABLE `%(table)s` (
+  `objectType` int(11) NOT NULL,
+  `deleteDate` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
+
+        self.cursor.execute("use %s" % self.db1)
+        self.cursor.execute(t1)
+
+        self.cursor.execute("use %s" % self.db2)
+        self.cursor.execute(t2)
+
+        (drop, add, diffs) = schemadiff.diff_table(
+            self.cursor, tableName, self.db1, self.db2)
+
+        dml = schemadiff.construct_altertable(self.cursor, self.db1, self.db2, tableName, drop, add, diffs)
+        self.cursor.execute(dml)
+
+        cs1 = schemadiff.dbchecksum(self.db1)
+        cs2 = schemadiff.dbchecksum(self.db2)
+        self.assertEqual(cs1, cs2)
+
+    def testTableDiff(self):
+        """test diffs on a table where columns are added, deleted, and changed.
+        """
+        tableName = 'deletedObject'
+
+        t1 = """CREATE TABLE `%(table)s` (
+  `objectType` int(11) NOT NULL,
+  `objectId` bigint(20) NOT NULL,
+  `deleteDate` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
+
+        t2 = """CREATE TABLE `%(table)s` (
+  `deleteDate` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `objectType` smallint(6) unsigned NOT NULL,
+  `objectNamespaceAndId` bigint(20) NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
+
+        self.cursor.execute("use %s" % self.db1)
+        self.cursor.execute(t1)
+
+        self.cursor.execute("use %s" % self.db2)
+        self.cursor.execute(t2)
+
+        (drop, add, diffs) = schemadiff.diff_table(
+            self.cursor, tableName, self.db1, self.db2)
+
+        dml = schemadiff.construct_altertable(self.cursor, self.db1, self.db2, tableName, drop, add, diffs)
+        self.cursor.execute(dml)
+
+        a1 = schemadiff.dbdump(self.db1)
+        b1 = schemadiff.normalize(a1)
+
+        a2 = schemadiff.dbdump(self.db2)
+        b2 = schemadiff.normalize(a2)
+
+        cs1 = schemadiff.dbchecksum(self.db1)
+        cs2 = schemadiff.dbchecksum(self.db2)
+        self.assertEqual(cs1, cs2)
+
+    def tearDown(self):
+        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db1 })
+        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db2 })
+
+        self.cursor.close()
+        self.dbconn.close()
 
 if __name__ == '__main__':
     filterwarnings('ignore', category = MySQLdb.Warning)
