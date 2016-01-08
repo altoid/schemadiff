@@ -1,5 +1,22 @@
 #!/usr/bin/env python
 
+# TODO:  handle column default values
+#
+# TODO:  timestamp columns with specifiers
+#
+# TODO:  check if the following is the same for the common tables:
+# tables.engine
+# tables.table_collation
+#
+# TODO:  add a hash of the full path to the database names.
+# right now just don't deal with schema files
+# with the same base name.
+#
+# db1 = "%s_%s" % (file1, hash1.hexdigest())
+# db2 = "%s_%s" % (file2, hash2.hexdigest())
+    
+
+
 import MySQLdb
 # docs at http://mysql-python.sourceforge.net/MySQLdb.html
 
@@ -87,10 +104,7 @@ def dbchecksum(dbname):
     return shacmd(normalize(dbdump(dbname)))
 
 def diff_column(cursor, table, column, db1, db2):
-    # TODO:  handle column default values
-    # TODO:  timestamp columns with specifiers
-
-    metadata_columns = ['column_type', 'is_nullable']
+    metadata_columns = ['column_type', 'is_nullable', 'column_default']
     query = """
  select %(metadata_columns)s
  from information_schema.columns
@@ -123,10 +137,23 @@ def diff_column(cursor, table, column, db1, db2):
         if d1[c] != d2[c]:
             return d2
 
-def construct_altertable(cursor, fromdb, todb, table, drop, add, diffs):
+def construct_altertable(cursor, fromdb, todb, table, **kwargs):
     """constructs the alter table statement to reflect column drops, adds, and mods
     to a single table.
     """
+
+    drop = None
+    add = None
+    diffs = None
+
+    if 'drop' in kwargs:
+        drop = kwargs['drop']
+
+    if 'add' in kwargs:
+        add = kwargs['add']
+
+    if 'diffs' in kwargs:
+        diffs = kwargs['diffs']
 
     if drop is None and add is None and diffs is None:
         return None
@@ -140,30 +167,36 @@ def construct_altertable(cursor, fromdb, todb, table, drop, add, diffs):
 
     # for columns that we add, go get the metadata
     if add is not None:
+        metadata_columns = ['column_type', 'is_nullable', 'column_default', 'column_name']
         addcolumns = ',\''.join(add)
         sql = """
- select column_name, column_type, is_nullable
+ select %(metadata_columns)s
  from information_schema.columns
  where table_schema = '%(db)s' and
  table_name = '%(table)s' and
  column_name in ('%(columns)s')""" % {
+            "metadata_columns" : ', '.join(metadata_columns),
             "db" : todb,
             "table" : table,
             "columns" : addcolumns }
         cursor.execute(sql)
         for row in cursor.fetchall():
-            d1 = dict(zip(['column_name', 'column_type', 'is_nullable'],
+            d1 = dict(zip(metadata_columns,
                       row))
+            clause = ""
             if d1['is_nullable'] == 'NO':
-                clauses.append("ADD COLUMN %(colname)s %(data_type)s NOT NULL" % {
+                clause = ("ADD COLUMN %(colname)s %(data_type)s NOT NULL" % {
                         "colname" : d1['column_name'],
                         "data_type" : d1['column_type']
                         })
             else:
-                clauses.append("ADD COLUMN %(colname)s %(data_type)s" % {
+                clause = ("ADD COLUMN %(colname)s %(data_type)s" % {
                         "colname" : d1['column_name'],
                         "data_type" : d1['column_type']
                         })
+            if d1['column_default']:
+                clause += " DEFAULT %s" % (d1['column_default'])
+            clauses.append(clause)
 
     if diffs is not None:
         for k in diffs.keys():
@@ -175,6 +208,9 @@ def construct_altertable(cursor, fromdb, todb, table, drop, add, diffs):
                 if diffs[k]['is_nullable'] == 'NO':
                     clause += " NOT"
                 clause += " NULL"
+            if 'column_default' in diffs[k]:
+                if diffs[k]['column_default']:
+                    clause += " DEFAULT %s" % diffs[k]['column_default']
             clauses.append(clause)
     
     if len(clauses) > 0:
@@ -264,11 +300,6 @@ def diff_databases(cursor, db1, db2):
     db1only = db1tables - db2tables
     db2only = db2tables - db1tables
 
-    # TODO:  check if the following is the same for the common tables:
-    #
-    # tables.engine
-    # tables.table_collation
-
     if len(db1only) > 0:
         print "============== %s only ==============" % db1
         print db1only
@@ -334,13 +365,6 @@ def main():
     
     hash1.update(path1)
     hash2.update(path2)
-    
-    # TODO:  add a hash of the full path to the database names.
-    # right now just don't deal with schema files
-    # with the same base name.
-    
-    # db1 = "%s_%s" % (file1, hash1.hexdigest())
-    # db2 = "%s_%s" % (file2, hash2.hexdigest())
     
     db1 = "%s" % (os.path.splitext(file1)[0])
     db2 = "%s" % (os.path.splitext(file2)[0])
