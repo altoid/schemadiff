@@ -246,10 +246,10 @@ def construct_altertable(cursor, fromdb, todb, table, **kwargs):
     if index_add is not None:
         for i in index_add.keys():
             if i == 'PRIMARY':
-                clauses.append("ADD PRIMARY KEY (%(columns)s))" % {
+                clauses.append("ADD PRIMARY KEY (%(columns)s)" % {
                         "columns" : index_add[i] })
             else:
-                clauses.append("ADD INDEX %(index)s (%(columns)s))" % {
+                clauses.append("ADD INDEX %(index)s (%(columns)s)" % {
                         "index" : i,
                         "columns" : index_add[i] })
 
@@ -257,12 +257,12 @@ def construct_altertable(cursor, fromdb, todb, table, **kwargs):
         for i in index_diffs.keys():
             if i == 'PRIMARY':
                 clauses.append("DROP PRIMARY KEY")
-                clauses.append("ADD PRIMARY KEY (%(columns)s))" % {
+                clauses.append("ADD PRIMARY KEY (%(columns)s)" % {
                         "columns" : index_diffs[i] })
             else:
                 clauses.append("DROP INDEX %(index)s" % {
                         "index" : i })
-                clauses.append("ADD INDEX %(index)s (%(columns)s))" % {
+                clauses.append("ADD INDEX %(index)s (%(columns)s)" % {
                         "index" : i,
                         "columns" : index_diffs[i] })
 
