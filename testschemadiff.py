@@ -3,6 +3,7 @@
 import MySQLdb
 # docs at http://mysql-python.sourceforge.net/MySQLdb.html
 
+import ast
 import sys
 import time
 import os
@@ -565,7 +566,278 @@ class TestIndexDiff(unittest.TestCase):
     # add/drop/change ordinary key
 
     # changing has to be done as drop-then-add
-    pass
+
+    db1 = 'schemadiff_testindexdiff_old'
+    db2 = 'schemadiff_testindexdiff_new'
+    dbconn = None
+    cursor = None
+
+    def setUp(self):
+        self.dbconn = dsn.getConnection()
+        self.cursor = self.dbconn.cursor()
+
+        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db1 })
+        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db2 })
+        self.cursor.execute("create database %(db)s" % { "db" : self.db1 })
+        self.cursor.execute("create database %(db)s" % { "db" : self.db2 })
+
+    def testIndexDiff(self):
+        """
+        test diffs on a table where ordinary indexes are added, deleted, and changed.
+        """
+        tableName = 'mytable'
+
+        t1 = """CREATE TABLE `%(table)s` (
+  column1 int not null default 0,
+  column2 int not null default 0,
+  column3 int not null default 0,
+  column4 int not null default 0,
+  key key_change (column1),
+  key key_drop (column3)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
+
+        t2 = """CREATE TABLE `%(table)s` (
+  column1 int not null default 0,
+  column2 int not null default 0,
+  column3 int not null default 0,
+  column4 int not null default 0,
+  key key_change (column1, column2),
+  key key_add (column4)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
+
+        self.cursor.execute("use %s" % self.db1)
+        self.cursor.execute(t1)
+
+        self.cursor.execute("use %s" % self.db2)
+        self.cursor.execute(t2)
+
+        (drop, add, diffs) = schemadiff.diff_table_indexes(
+            self.cursor, tableName, self.db1, self.db2)
+
+        drop_control = ast.literal_eval("{u'key_drop': u'column3'}")
+        add_control = ast.literal_eval("{u'key_add': u'column4'}")
+        diffs_control = ast.literal_eval("{u'key_change': u'column1,column2'}")
+
+        self.assertDictEqual(drop_control, drop)
+        self.assertDictEqual(add_control, add)
+        self.assertDictEqual(diffs_control, diffs)
+
+    def testDropIndex(self):
+        """
+        test diffs on a table where ordinary indexes are added, deleted, and changed.
+        """
+        tableName = 'mytable'
+
+        t1 = """CREATE TABLE `%(table)s` (
+  column1 int not null default 0,
+  column2 int not null default 0,
+  column3 int not null default 0,
+  column4 int not null default 0,
+  key key_drop (column3)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
+
+        t2 = """CREATE TABLE `%(table)s` (
+  column1 int not null default 0,
+  column2 int not null default 0,
+  column3 int not null default 0,
+  column4 int not null default 0
+) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
+
+        self.cursor.execute("use %s" % self.db1)
+        self.cursor.execute(t1)
+
+        self.cursor.execute("use %s" % self.db2)
+        self.cursor.execute(t2)
+
+        (index_drop, index_add, index_diffs) = schemadiff.diff_table_indexes(
+            self.cursor, tableName, self.db1, self.db2)
+
+        dml = schemadiff.construct_altertable(self.cursor, self.db1, self.db2,
+                                              tableName, index_drop=index_drop)
+        print dml
+
+    def testAddIndex(self):
+        """
+        test diffs on a table where ordinary indexes are added, deleted, and changed.
+        """
+        tableName = 'mytable'
+
+        t1 = """CREATE TABLE `%(table)s` (
+  column1 int not null default 0,
+  column2 int not null default 0,
+  column3 int not null default 0,
+  column4 int not null default 0
+) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
+
+        t2 = """CREATE TABLE `%(table)s` (
+  column1 int not null default 0,
+  column2 int not null default 0,
+  column3 int not null default 0,
+  column4 int not null default 0,
+  key key_add (column3)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
+
+        self.cursor.execute("use %s" % self.db1)
+        self.cursor.execute(t1)
+
+        self.cursor.execute("use %s" % self.db2)
+        self.cursor.execute(t2)
+
+        (index_drop, index_add, index_diffs) = schemadiff.diff_table_indexes(
+            self.cursor, tableName, self.db1, self.db2)
+
+        dml = schemadiff.construct_altertable(self.cursor, self.db1, self.db2,
+                                              tableName, index_add=index_add)
+        print dml
+
+    def testChangeIndex(self):
+        """
+        test diffs on a table where ordinary indexes are added, deleted, and changed.
+        """
+        tableName = 'mytable'
+
+        t1 = """CREATE TABLE `%(table)s` (
+  column1 int not null default 0,
+  column2 int not null default 0,
+  column3 int not null default 0,
+  column4 int not null default 0,
+  key key_add (column3)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
+
+        t2 = """CREATE TABLE `%(table)s` (
+  column1 int not null default 0,
+  column2 int not null default 0,
+  column3 int not null default 0,
+  column4 int not null default 0,
+  key key_add (column2,column3)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
+
+        self.cursor.execute("use %s" % self.db1)
+        self.cursor.execute(t1)
+
+        self.cursor.execute("use %s" % self.db2)
+        self.cursor.execute(t2)
+
+        (index_drop, index_add, index_diffs) = schemadiff.diff_table_indexes(
+            self.cursor, tableName, self.db1, self.db2)
+
+        dml = schemadiff.construct_altertable(self.cursor, self.db1, self.db2,
+                                              tableName,
+                                              index_diffs=index_diffs)
+        print dml
+
+    def testDropPK(self):
+        """
+        test diffs on a table where ordinary indexes are added, deleted, and changed.
+        """
+        tableName = 'mytable'
+
+        t1 = """CREATE TABLE `%(table)s` (
+  column1 int not null default 0,
+  column2 int not null default 0,
+  column3 int not null default 0,
+  column4 int not null default 0,
+  PRIMARY KEY(column1, column2)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
+
+        t2 = """CREATE TABLE `%(table)s` (
+  column1 int not null default 0,
+  column2 int not null default 0,
+  column3 int not null default 0,
+  column4 int not null default 0
+) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
+
+        self.cursor.execute("use %s" % self.db1)
+        self.cursor.execute(t1)
+
+        self.cursor.execute("use %s" % self.db2)
+        self.cursor.execute(t2)
+
+        (index_drop, index_add, index_diffs) = schemadiff.diff_table_indexes(
+            self.cursor, tableName, self.db1, self.db2)
+
+        dml = schemadiff.construct_altertable(self.cursor, self.db1, self.db2,
+                                              tableName, index_drop=index_drop)
+        print dml
+
+    def testAddPK(self):
+        """
+        test diffs on a table where ordinary indexes are added, deleted, and changed.
+        """
+        tableName = 'mytable'
+
+        t1 = """CREATE TABLE `%(table)s` (
+  column1 int not null default 0,
+  column2 int not null default 0,
+  column3 int not null default 0,
+  column4 int not null default 0
+) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
+
+        t2 = """CREATE TABLE `%(table)s` (
+  column1 int not null default 0,
+  column2 int not null default 0,
+  column3 int not null default 0,
+  column4 int not null default 0,
+  PRIMARY KEY(column1, column2)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
+
+        self.cursor.execute("use %s" % self.db1)
+        self.cursor.execute(t1)
+
+        self.cursor.execute("use %s" % self.db2)
+        self.cursor.execute(t2)
+
+        (index_drop, index_add, index_diffs) = schemadiff.diff_table_indexes(
+            self.cursor, tableName, self.db1, self.db2)
+
+        dml = schemadiff.construct_altertable(self.cursor, self.db1, self.db2,
+                                              tableName,
+                                              index_add=index_add)
+        print dml
+
+    def testChangePK(self):
+        """
+        test diffs on a table where ordinary indexes are added, deleted, and changed.
+        """
+        tableName = 'mytable'
+
+        t1 = """CREATE TABLE `%(table)s` (
+  column1 int not null default 0,
+  column2 int not null default 0,
+  column3 int not null default 0,
+  column4 int not null default 0,
+  PRIMARY KEY(column1)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
+
+        t2 = """CREATE TABLE `%(table)s` (
+  column1 int not null default 0,
+  column2 int not null default 0,
+  column3 int not null default 0,
+  column4 int not null default 0,
+  PRIMARY KEY(column1, column2)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
+
+        self.cursor.execute("use %s" % self.db1)
+        self.cursor.execute(t1)
+
+        self.cursor.execute("use %s" % self.db2)
+        self.cursor.execute(t2)
+
+        (index_drop, index_add, index_diffs) = schemadiff.diff_table_indexes(
+            self.cursor, tableName, self.db1, self.db2)
+
+        dml = schemadiff.construct_altertable(self.cursor, self.db1, self.db2,
+                                              tableName,
+                                              index_diffs=index_diffs)
+        print dml
+
+    def tearDown(self):
+#        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db1 })
+#        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db2 })
+#
+#        self.cursor.close()
+#        self.dbconn.close()
+        pass
 
 if __name__ == '__main__':
     filterwarnings('ignore', category = MySQLdb.Warning)

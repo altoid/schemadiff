@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-# TODO:  handle column default values
+# TODO:  handle auto_increment columns
 #
 # TODO:  timestamp columns with specifiers
 #
@@ -14,8 +14,11 @@
 #
 # db1 = "%s_%s" % (file1, hash1.hexdigest())
 # db2 = "%s_%s" % (file2, hash2.hexdigest())
-    
-
+#
+# TODO:  if we drop an indexed column, we don't need to drop the
+#        associated index.    
+#
+# TODO:  handle fulltext indexes
 
 import MySQLdb
 # docs at http://mysql-python.sourceforge.net/MySQLdb.html
@@ -146,16 +149,36 @@ def construct_altertable(cursor, fromdb, todb, table, **kwargs):
     add = None
     diffs = None
 
+    index_drop = None
+    index_add = None
+    index_diffs = None
+
+    ch_ch_changes = False # RIP david bowie
     if 'drop' in kwargs:
+        ch_ch_changes = True
         drop = kwargs['drop']
 
     if 'add' in kwargs:
+        ch_ch_changes = True
         add = kwargs['add']
 
     if 'diffs' in kwargs:
+        ch_ch_changes = True
         diffs = kwargs['diffs']
 
-    if drop is None and add is None and diffs is None:
+    if 'index_drop' in kwargs:
+        ch_ch_changes = True
+        index_drop = kwargs['index_drop']
+
+    if 'index_add' in kwargs:
+        ch_ch_changes = True
+        index_add = kwargs['index_add']
+
+    if 'index_diffs' in kwargs:
+        ch_ch_changes = True
+        index_diffs = kwargs['index_diffs']
+
+    if not ch_ch_changes:
         return None
 
     clauses = []
@@ -212,7 +235,37 @@ def construct_altertable(cursor, fromdb, todb, table, **kwargs):
                 if diffs[k]['column_default']:
                     clause += " DEFAULT %s" % diffs[k]['column_default']
             clauses.append(clause)
-    
+
+    if index_drop is not None:
+        for i in index_drop.keys():
+            if i == 'PRIMARY':
+                clauses.append("DROP PRIMARY KEY")
+            else:
+                clauses.append("DROP INDEX %(index)s" % { "index" : i })
+
+    if index_add is not None:
+        for i in index_add.keys():
+            if i == 'PRIMARY':
+                clauses.append("ADD PRIMARY KEY (%(columns)s))" % {
+                        "columns" : index_add[i] })
+            else:
+                clauses.append("ADD INDEX %(index)s (%(columns)s))" % {
+                        "index" : i,
+                        "columns" : index_add[i] })
+
+    if index_diffs is not None:
+        for i in index_diffs.keys():
+            if i == 'PRIMARY':
+                clauses.append("DROP PRIMARY KEY")
+                clauses.append("ADD PRIMARY KEY (%(columns)s))" % {
+                        "columns" : index_diffs[i] })
+            else:
+                clauses.append("DROP INDEX %(index)s" % {
+                        "index" : i })
+                clauses.append("ADD INDEX %(index)s (%(columns)s))" % {
+                        "index" : i,
+                        "columns" : index_diffs[i] })
+
     if len(clauses) > 0:
         dml = "ALTER TABLE %(db)s.%(table)s " % {
             "db" : fromdb,
@@ -220,6 +273,76 @@ def construct_altertable(cursor, fromdb, todb, table, **kwargs):
             }
 
         return dml + ', '.join(clauses)
+
+def diff_table_indexes(cursor, table, db1, db2):
+    # no FK for now
+    query = """
+select index_name,
+       group_concat(column_name order by seq_in_index) key_columns
+from information_schema.statistics
+
+where table_schema = '%(db)s'
+and table_name = '%(table)s'
+group by table_schema, table_name, index_name
+"""
+    q1 = query % {
+        "db" : db1,
+        "table" : table }
+
+    q2 = query % {
+        "db" : db2,
+        "table" : table }
+
+    columns = ['index_name', 'key_columns']
+
+    index_to_columns_1 = {}
+    cursor.execute(q1)
+    for row in cursor.fetchall():
+        d1 = dict(zip(columns,
+                      row))
+        index_to_columns_1[d1['index_name']] = d1['key_columns']
+
+    index_to_columns_2 = {}
+    cursor.execute(q2)
+    for row in cursor.fetchall():
+        d2 = dict(zip(columns,
+                      row))
+        index_to_columns_2[d2['index_name']] = d2['key_columns']
+
+    indexes_1 = set(index_to_columns_1.keys())
+    indexes_2 = set(index_to_columns_2.keys())
+
+    add = indexes_2 - indexes_1
+    drop = indexes_1 - indexes_2
+    change = indexes_1 & indexes_2
+
+    indexes_to_add = {}
+    for k in add:
+        indexes_to_add[k] = index_to_columns_2[k]
+
+    indexes_to_drop = {}
+    for k in drop:
+        indexes_to_drop[k] = index_to_columns_1[k]
+
+    indexes_to_change = {}
+    for k in change:
+        indexes_to_change[k] = index_to_columns_2[k]
+
+    if len(add) == 0:
+        indexes_to_add = None
+
+    if len(drop) == 0:
+        indexes_to_drop = None
+
+    if len(change) == 0:
+        indexes_to_change = None
+
+    #
+    # each one of these is either None or a dict that looks like this:
+    #
+    # <name_of_index> ==> <comma-separated list of columns in index>
+    #
+    return (indexes_to_drop, indexes_to_add, indexes_to_change)
 
 def diff_table(cursor, table, db1, db2):
     query = "select column_name from information_schema.columns where table_schema = '%s' and table_name = '%s'"
@@ -274,7 +397,10 @@ def diff_table(cursor, table, db1, db2):
     if len(column_diffs) == 0:
         column_diffs = None
 
-    return (columns_to_drop, columns_to_add, column_diffs)
+    (indexes_to_drop, indexes_to_add, indexes_to_change) = diff_table_indexes(cursor, table, db1, db2)
+
+    return (columns_to_drop, columns_to_add, column_diffs,
+            indexes_to_drop, indexes_to_add, indexes_to_change)
 
 def diff_databases(cursor, db1, db2):
     tquery = "select table_name from information_schema.tables where table_schema = '%s'"
@@ -308,7 +434,6 @@ def diff_databases(cursor, db1, db2):
         print "============== %s only ==============" % db2
         print db2only
 
-    # just look at one table for now
     common_list = list(common)
     for c in common_list:
         diff_table(cursor, c, db1, db2)
