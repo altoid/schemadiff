@@ -613,8 +613,8 @@ class TestIndexDiffDML(unittest.TestCase):
         self.cursor.execute("use %s" % self.db2)
         self.cursor.execute(t2)
 
-        (drop, add, diffs) = schemadiff.diff_table_indexes(
-            self.cursor, tableName, self.db1, self.db2)[0:3]
+        (drop, add, diffs) = schemadiff.diff_table(
+            self.cursor, tableName, self.db1, self.db2)[3:6]
 
         drop_control = ast.literal_eval("{u'key_drop': u'column3'}")
         add_control = ast.literal_eval("{u'key_add': u'column4'}")
@@ -651,8 +651,8 @@ class TestIndexDiffDML(unittest.TestCase):
         self.cursor.execute("use %s" % self.db2)
         self.cursor.execute(t2)
 
-        (index_drop, index_add, index_diffs) = schemadiff.diff_table_indexes(
-            self.cursor, tableName, self.db1, self.db2)
+        (index_drop, index_add, index_diffs) = schemadiff.diff_table(
+            self.cursor, tableName, self.db1, self.db2)[3:6]
 
         self.assertIsNotNone(index_drop)
         self.assertIsNone(index_add)
@@ -695,8 +695,8 @@ class TestIndexDiffDML(unittest.TestCase):
         self.cursor.execute("use %s" % self.db2)
         self.cursor.execute(t2)
 
-        (index_drop, index_add, index_diffs) = schemadiff.diff_table_indexes(
-            self.cursor, tableName, self.db1, self.db2)
+        (index_drop, index_add, index_diffs) = schemadiff.diff_table(
+            self.cursor, tableName, self.db1, self.db2)[3:6]
 
         self.assertIsNone(index_drop)
         self.assertIsNotNone(index_add)
@@ -740,8 +740,8 @@ class TestIndexDiffDML(unittest.TestCase):
         self.cursor.execute("use %s" % self.db2)
         self.cursor.execute(t2)
 
-        (index_drop, index_add, index_diffs) = schemadiff.diff_table_indexes(
-            self.cursor, tableName, self.db1, self.db2)
+        (index_drop, index_add, index_diffs) = schemadiff.diff_table(
+            self.cursor, tableName, self.db1, self.db2)[3:6]
 
         dml = schemadiff.construct_altertable(self.cursor, self.db1, self.db2,
                                               tableName,
@@ -791,8 +791,8 @@ class TestIndexDiffDML(unittest.TestCase):
         self.cursor.execute("use %s" % self.db2)
         self.cursor.execute(t2)
 
-        (index_drop, index_add, index_diffs) = schemadiff.diff_table_indexes(
-            self.cursor, tableName, self.db1, self.db2)
+        (index_drop, index_add, index_diffs) = schemadiff.diff_table(
+            self.cursor, tableName, self.db1, self.db2)[3:6]
 
         self.assertIsNotNone(index_drop)
         self.assertIsNone(index_add)
@@ -831,8 +831,8 @@ class TestIndexDiffDML(unittest.TestCase):
         self.cursor.execute("use %s" % self.db2)
         self.cursor.execute(t2)
 
-        (index_drop, index_add, index_diffs) = schemadiff.diff_table_indexes(
-            self.cursor, tableName, self.db1, self.db2)
+        (index_drop, index_add, index_diffs) = schemadiff.diff_table(
+            self.cursor, tableName, self.db1, self.db2)[3:6]
 
         self.assertIsNone(index_drop)
         self.assertIsNotNone(index_add)
@@ -873,8 +873,8 @@ class TestIndexDiffDML(unittest.TestCase):
         self.cursor.execute("use %s" % self.db2)
         self.cursor.execute(t2)
 
-        (index_drop, index_add, index_diffs) = schemadiff.diff_table_indexes(
-            self.cursor, tableName, self.db1, self.db2)
+        (index_drop, index_add, index_diffs) = schemadiff.diff_table(
+            self.cursor, tableName, self.db1, self.db2)[3:6]
 
         self.assertIsNone(index_drop)
         self.assertIsNone(index_add)
@@ -953,8 +953,8 @@ class TestIndexDiff(unittest.TestCase):
         self.cursor.execute("use %s" % self.db2)
         self.cursor.execute(t2)
 
-        (drop, add, diffs) = schemadiff.diff_table_indexes(
-            self.cursor, tableName, self.db1, self.db2)[0:3]
+        (drop, add, diffs) = schemadiff.diff_table(
+            self.cursor, tableName, self.db1, self.db2)[3:6]
 
         dml = schemadiff.construct_altertable(self.cursor, self.db1, self.db2, tableName,
                                               index_drop=drop,
@@ -994,8 +994,8 @@ class TestIndexDiff(unittest.TestCase):
         self.cursor.execute("use %s" % self.db2)
         self.cursor.execute(t2)
 
-        (index_drop, index_add, index_diffs) = schemadiff.diff_table_indexes(
-            self.cursor, tableName, self.db1, self.db2)
+        (index_drop, index_add, index_diffs) = schemadiff.diff_table(
+            self.cursor, tableName, self.db1, self.db2)[3:6]
 
         dml = schemadiff.construct_altertable(self.cursor, self.db1, self.db2,
                                               tableName, index_drop=index_drop)
@@ -1033,8 +1033,8 @@ class TestIndexDiff(unittest.TestCase):
         self.cursor.execute("use %s" % self.db2)
         self.cursor.execute(t2)
 
-        (index_drop, index_add, index_diffs) = schemadiff.diff_table_indexes(
-            self.cursor, tableName, self.db1, self.db2)
+        (index_drop, index_add, index_diffs) = schemadiff.diff_table(
+            self.cursor, tableName, self.db1, self.db2)[3:6]
 
         dml = schemadiff.construct_altertable(self.cursor, self.db1, self.db2,
                                               tableName, index_add=index_add)
@@ -1070,8 +1070,8 @@ class TestIndexDiff(unittest.TestCase):
         self.cursor.execute("use %s" % self.db2)
         self.cursor.execute(t2)
 
-        (index_drop, index_add, index_diffs) = schemadiff.diff_table_indexes(
-            self.cursor, tableName, self.db1, self.db2)
+        (index_drop, index_add, index_diffs) = schemadiff.diff_table(
+            self.cursor, tableName, self.db1, self.db2)[3:6]
 
         dml = schemadiff.construct_altertable(self.cursor, self.db1, self.db2,
                                               tableName,
@@ -1110,8 +1110,8 @@ class TestIndexDiff(unittest.TestCase):
         self.cursor.execute("use %s" % self.db2)
         self.cursor.execute(t2)
 
-        (index_drop, index_add, index_diffs) = schemadiff.diff_table_indexes(
-            self.cursor, tableName, self.db1, self.db2)
+        (index_drop, index_add, index_diffs) = schemadiff.diff_table(
+            self.cursor, tableName, self.db1, self.db2)[3:6]
 
         dml = schemadiff.construct_altertable(self.cursor, self.db1, self.db2,
                                               tableName, index_drop=index_drop)
@@ -1146,8 +1146,8 @@ class TestIndexDiff(unittest.TestCase):
         self.cursor.execute("use %s" % self.db2)
         self.cursor.execute(t2)
 
-        (index_drop, index_add, index_diffs) = schemadiff.diff_table_indexes(
-            self.cursor, tableName, self.db1, self.db2)
+        (index_drop, index_add, index_diffs) = schemadiff.diff_table(
+            self.cursor, tableName, self.db1, self.db2)[3:6]
 
         dml = schemadiff.construct_altertable(self.cursor, self.db1, self.db2,
                                               tableName,
@@ -1184,8 +1184,8 @@ class TestIndexDiff(unittest.TestCase):
         self.cursor.execute("use %s" % self.db2)
         self.cursor.execute(t2)
 
-        (index_drop, index_add, index_diffs) = schemadiff.diff_table_indexes(
-            self.cursor, tableName, self.db1, self.db2)
+        (index_drop, index_add, index_diffs) = schemadiff.diff_table(
+            self.cursor, tableName, self.db1, self.db2)[3:6]
 
         dml = schemadiff.construct_altertable(self.cursor, self.db1, self.db2,
                                               tableName,

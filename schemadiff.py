@@ -276,7 +276,7 @@ def construct_altertable(cursor, fromdb, todb, table, **kwargs):
 
         return dml + ', '.join(clauses)
 
-def diff_table_indexes(cursor, table, db1, db2):
+def _diff_table_indexes(cursor, table, db1, db2):
     # no FK for now
     query = """
 select index_name,
@@ -399,7 +399,7 @@ def diff_table(cursor, table, db1, db2):
     if len(column_diffs) == 0:
         column_diffs = None
 
-    (indexes_to_drop, indexes_to_add, indexes_to_change) = diff_table_indexes(cursor, table, db1, db2)
+    (indexes_to_drop, indexes_to_add, indexes_to_change) = _diff_table_indexes(cursor, table, db1, db2)
 
     return (columns_to_drop, columns_to_add, column_diffs,
             indexes_to_drop, indexes_to_add, indexes_to_change)
