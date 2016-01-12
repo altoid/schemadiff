@@ -249,24 +249,24 @@ def construct_altertable(cursor, fromdb, todb, table, **kwargs):
         for i in index_add.keys():
             if i == 'PRIMARY':
                 clauses.append("ADD PRIMARY KEY (%(columns)s)" % {
-                        "columns" : index_add[i] })
+                        "columns" : index_add[i]['key_columns'] })
             else:
                 clauses.append("ADD INDEX %(index)s (%(columns)s)" % {
                         "index" : i,
-                        "columns" : index_add[i] })
+                        "columns" : index_add[i]['key_columns'] })
 
     if index_diffs is not None:
         for i in index_diffs.keys():
             if i == 'PRIMARY':
                 clauses.append("DROP PRIMARY KEY")
                 clauses.append("ADD PRIMARY KEY (%(columns)s)" % {
-                        "columns" : index_diffs[i] })
+                        "columns" : index_diffs[i]['key_columns'] })
             else:
                 clauses.append("DROP INDEX %(index)s" % {
                         "index" : i })
                 clauses.append("ADD INDEX %(index)s (%(columns)s)" % {
                         "index" : i,
-                        "columns" : index_diffs[i] })
+                        "columns" : index_diffs[i]['key_columns'] })
 
     if len(clauses) > 0:
         dml = "ALTER TABLE %(db)s.%(table)s " % {
@@ -279,13 +279,18 @@ def construct_altertable(cursor, fromdb, todb, table, **kwargs):
 def _diff_table_indexes(cursor, table, db1, db2):
     # no FK for now
     query = """
-select index_name,
-       group_concat(column_name order by seq_in_index) key_columns
-from information_schema.statistics
-
-where table_schema = '%(db)s'
-and table_name = '%(table)s'
-group by table_schema, table_name, index_name
+select
+ s.index_name,
+ group_concat(column_name order by seq_in_index) key_columns,
+ c.constraint_type
+from information_schema.statistics s
+left join information_schema.table_constraints c
+on s.index_name = c.constraint_name
+and s.table_schema = c.table_schema
+and s.table_name = c.table_name
+where s.table_schema = '%(db)s'
+and s.table_name = '%(table)s'
+group by s.table_schema, s.table_name, s.index_name
 """
     q1 = query % {
         "db" : db1,
@@ -295,21 +300,21 @@ group by table_schema, table_name, index_name
         "db" : db2,
         "table" : table }
 
-    columns = ['index_name', 'key_columns']
+    columns = ['index_name', 'key_columns', 'constraint_type']
 
     index_to_columns_1 = {}
     cursor.execute(q1)
     for row in cursor.fetchall():
         d1 = dict(zip(columns,
                       row))
-        index_to_columns_1[d1['index_name']] = d1['key_columns']
+        index_to_columns_1[d1['index_name']] = d1
 
     index_to_columns_2 = {}
     cursor.execute(q2)
     for row in cursor.fetchall():
         d2 = dict(zip(columns,
                       row))
-        index_to_columns_2[d2['index_name']] = d2['key_columns']
+        index_to_columns_2[d2['index_name']] = d2
 
     indexes_1 = set(index_to_columns_1.keys())
     indexes_2 = set(index_to_columns_2.keys())
@@ -339,11 +344,6 @@ group by table_schema, table_name, index_name
     if len(change) == 0:
         indexes_to_change = None
 
-    #
-    # each one of these is either None or a dict that looks like this:
-    #
-    # <name_of_index> ==> <comma-separated list of columns in index>
-    #
     return (indexes_to_drop, indexes_to_add, indexes_to_change)
 
 def diff_table(cursor, table, db1, db2):

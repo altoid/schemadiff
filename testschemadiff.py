@@ -561,10 +561,6 @@ class TestAlterTable(unittest.TestCase):
         self.dbconn.close()
 
 class TestIndexDiffDML(unittest.TestCase):
-    # add/drop/change primary key
-    # add/drop/change foreign key
-    # add/drop/change ordinary key
-
     # changing has to be done as drop-then-add
 
     db1 = 'schemadiff_testindexdiffdml_old'
@@ -616,9 +612,9 @@ class TestIndexDiffDML(unittest.TestCase):
         (drop, add, diffs) = schemadiff.diff_table(
             self.cursor, tableName, self.db1, self.db2)[3:6]
 
-        drop_control = ast.literal_eval("{u'key_drop': u'column3'}")
-        add_control = ast.literal_eval("{u'key_add': u'column4'}")
-        diffs_control = ast.literal_eval("{u'key_change': u'column1,column2'}")
+        drop_control = ast.literal_eval("{u'key_drop': {'key_columns': u'column3', 'index_name': u'key_drop', 'constraint_type': None}}")
+        add_control = ast.literal_eval("{u'key_add': {'key_columns': u'column4', 'index_name': u'key_add', 'constraint_type': None}}")
+        diffs_control = ast.literal_eval("{u'key_change': {'key_columns': u'column1,column2', 'index_name': u'key_change', 'constraint_type': None}}")
 
         self.assertDictEqual(drop_control, drop)
         self.assertDictEqual(add_control, add)
