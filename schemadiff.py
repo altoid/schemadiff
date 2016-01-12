@@ -19,6 +19,8 @@
 #        associated index.    
 #
 # TODO:  handle fulltext indexes
+#
+# TODO:  handle unique indexes
 
 import MySQLdb
 # docs at http://mysql-python.sourceforge.net/MySQLdb.html
