@@ -111,199 +111,32 @@ def dbdump(dbname):
 def dbchecksum(dbname):
     return shacmd(normalize(dbdump(dbname)))
 
-def diff_column(cursor, table, column, db1, db2):
-    metadata_columns = ['column_type', 'is_nullable', 'column_default']
-    query = """
- select %(metadata_columns)s
- from information_schema.columns
- where table_schema = '%(db)s' and table_name = '%(table)s' and column_name = '%(column)s'
-"""
-    q1 = query % { "metadata_columns" : ', '.join(metadata_columns),
-                   "db" : db1,
-                   "table" : table,
-                   "column" : column }
-
-    q2 = query % { "metadata_columns" : ', '.join(metadata_columns),
-                   "db" : db2,
-                   "table" : table,
-                   "column" : column }
-
-    cursor.execute(q1)
-    for row in cursor.fetchall():
-        d1 = dict(zip(metadata_columns,
-                      row))
-
-    cursor.execute(q2)
-    for row in cursor.fetchall():
-        d2 = dict(zip(metadata_columns,
-                      row))
-
-    # if anything changed, the modify clause has
-    # to have everything in it.  otherwise it must be empty.
-
-    for c in metadata_columns:
-        if d1[c] != d2[c]:
-            return d2
-
-def construct_altertable(cursor, fromdb, todb, table, **kwargs):
-    """constructs the alter table statement to reflect column drops, adds, and mods
-    to a single table.
-    """
-
-    drop = None
-    add = None
-    diffs = None
-
-    index_drop = None
-    index_add = None
-    index_diffs = None
-
-    ch_ch_changes = False # RIP david bowie
-    if 'drop' in kwargs:
-        ch_ch_changes = True
-        drop = kwargs['drop']
-
-    if 'add' in kwargs:
-        ch_ch_changes = True
-        add = kwargs['add']
-
-    if 'diffs' in kwargs:
-        ch_ch_changes = True
-        diffs = kwargs['diffs']
-
-    if 'index_drop' in kwargs:
-        ch_ch_changes = True
-        index_drop = kwargs['index_drop']
-
-    if 'index_add' in kwargs:
-        ch_ch_changes = True
-        index_add = kwargs['index_add']
-
-    if 'index_diffs' in kwargs:
-        ch_ch_changes = True
-        index_diffs = kwargs['index_diffs']
-
-    if not ch_ch_changes:
-        return None
-
-    clauses = []
-    if drop is not None:
-        for d in drop:
-            clauses.append("DROP COLUMN %(column)s" % {
-                    "column" : d
-                    })
-
-    # for columns that we add, go get the metadata
-    if add is not None:
-        metadata_columns = ['column_type', 'is_nullable', 'column_default', 'column_name']
-        addcolumns = ',\''.join(add)
-        sql = """
- select %(metadata_columns)s
- from information_schema.columns
- where table_schema = '%(db)s' and
- table_name = '%(table)s' and
- column_name in ('%(columns)s')""" % {
-            "metadata_columns" : ', '.join(metadata_columns),
-            "db" : todb,
-            "table" : table,
-            "columns" : addcolumns }
-        cursor.execute(sql)
-        for row in cursor.fetchall():
-            d1 = dict(zip(metadata_columns,
-                      row))
-            clause = ""
-            if d1['is_nullable'] == 'NO':
-                clause = ("ADD COLUMN %(colname)s %(data_type)s NOT NULL" % {
-                        "colname" : d1['column_name'],
-                        "data_type" : d1['column_type']
-                        })
-            else:
-                clause = ("ADD COLUMN %(colname)s %(data_type)s" % {
-                        "colname" : d1['column_name'],
-                        "data_type" : d1['column_type']
-                        })
-            if d1['column_default']:
-                clause += " DEFAULT %s" % (d1['column_default'])
-            clauses.append(clause)
-
-    if diffs is not None:
-        for k in diffs.keys():
-            clause = "MODIFY COLUMN %(column)s %(datatype)s" % {
-                "column" : k,
-                "datatype" : diffs[k]['column_type']
-                }
-            if 'is_nullable' in diffs[k]:
-                if diffs[k]['is_nullable'] == 'NO':
-                    clause += " NOT"
-                clause += " NULL"
-            if 'column_default' in diffs[k]:
-                if diffs[k]['column_default']:
-                    clause += " DEFAULT %s" % diffs[k]['column_default']
-            clauses.append(clause)
-
-    if index_drop is not None:
-        for i in index_drop.keys():
-            if i == 'PRIMARY':
-                clauses.append("DROP PRIMARY KEY")
-            else:
-                clauses.append("DROP INDEX %(index)s" % { "index" : i })
-
-    if index_add is not None:
-        for i in index_add.keys():
-            if index_add[i]['constraint_type'] == 'PRIMARY KEY':
-                clauses.append("ADD PRIMARY KEY (%(columns)s)" % {
-                        "columns" : index_add[i]['key_columns'] })
-            elif index_add[i]['constraint_type'] == 'UNIQUE':
-                clauses.append("ADD UNIQUE KEY %(index)s (%(columns)s)" % {
-                        "index" : i,
-                        "columns" : index_add[i]['key_columns'] })
-            else:
-                clauses.append("ADD INDEX %(index)s (%(columns)s)" % {
-                        "index" : i,
-                        "columns" : index_add[i]['key_columns'] })
-
-    if index_diffs is not None:
-        for i in index_diffs.keys():
-            if index_diffs[i]['constraint_type'] == 'PRIMARY KEY':
-                clauses.append("DROP PRIMARY KEY")
-                clauses.append("ADD PRIMARY KEY (%(columns)s)" % {
-                        "columns" : index_diffs[i]['key_columns'] })
-            elif index_diffs[i]['constraint_type'] == 'UNIQUE':
-                clauses.append("DROP INDEX %(index)s" % {
-                        "index" : i })
-                clauses.append("ADD UNIQUE INDEX %(index)s (%(columns)s)" % {
-                        "index" : i,
-                        "columns" : index_diffs[i]['key_columns'] })
-            else:
-                clauses.append("DROP INDEX %(index)s" % {
-                        "index" : i })
-                clauses.append("ADD INDEX %(index)s (%(columns)s)" % {
-                        "index" : i,
-                        "columns" : index_diffs[i]['key_columns'] })
-
-    if len(clauses) > 0:
-        dml = "ALTER TABLE %(db)s.%(table)s " % {
-            "db" : fromdb,
-            "table" : table
-            }
-
-        return dml + ', '.join(clauses)
-
-def _diff_table_indexes(cursor, table, db1, db2):
-    # no FK for now
+def diff_table_indexes(cursor, table, db1, db2):
     query = """
 select
- s.index_name,
- group_concat(column_name order by seq_in_index) key_columns,
- c.constraint_type
+	s.index_name,
+	concat(
+	'ADD ',
+	case
+	when c.constraint_type = 'PRIMARY KEY' then c.constraint_type
+	when c.constraint_type = 'UNIQUE' then concat('UNIQUE KEY ', s.index_name)
+	else concat('KEY ', s.index_name)
+	end,
+	'(',
+	group_concat(column_name order by seq_in_index),
+	')'
+	) index_def
 from information_schema.statistics s
+
 left join information_schema.table_constraints c
 on s.index_name = c.constraint_name
 and s.table_schema = c.table_schema
 and s.table_name = c.table_name
+
 where s.table_schema = '%(db)s'
 and s.table_name = '%(table)s'
-group by s.table_schema, s.table_name, s.index_name
+and (constraint_type <> 'foreign key' or constraint_type is null)
+ group by s.table_schema, s.table_name, s.index_name
 """
     q1 = query % {
         "db" : db1,
@@ -313,51 +146,122 @@ group by s.table_schema, s.table_name, s.index_name
         "db" : db2,
         "table" : table }
 
-    columns = ['index_name', 'key_columns', 'constraint_type']
-
-    index_to_columns_1 = {}
+    indexdefs1 = {}
     cursor.execute(q1)
     for row in cursor.fetchall():
-        d1 = dict(zip(columns,
-                      row))
-        index_to_columns_1[d1['index_name']] = d1
+        indexdefs1[row[0]] = row[1]
 
-    index_to_columns_2 = {}
+    indexdefs2 = {}
     cursor.execute(q2)
     for row in cursor.fetchall():
-        d2 = dict(zip(columns,
-                      row))
-        index_to_columns_2[d2['index_name']] = d2
+        indexdefs2[row[0]] = row[1]
 
-    indexes_1 = set(index_to_columns_1.keys())
-    indexes_2 = set(index_to_columns_2.keys())
+    indexes_1 = set(indexdefs1.keys())
+    indexes_2 = set(indexdefs2.keys())
 
     add = indexes_2 - indexes_1
     drop = indexes_1 - indexes_2
     change = indexes_1 & indexes_2
 
-    indexes_to_add = {}
-    for k in add:
-        indexes_to_add[k] = index_to_columns_2[k]
+    clauses = []
+    for d in drop:
+        if d == 'PRIMARY':
+            clauses.append("DROP PRIMARY KEY")
+        else:
+            clauses.append("DROP INDEX %s" % d)
 
-    indexes_to_drop = {}
-    for k in drop:
-        indexes_to_drop[k] = index_to_columns_1[k]
+    for a in add:
+        clauses.append(indexdefs2[a])
 
-    indexes_to_change = {}
-    for k in change:
-        indexes_to_change[k] = index_to_columns_2[k]
+    for c in change:
+        if c == 'PRIMARY':
+            clauses.append("DROP PRIMARY KEY")
+        else:
+            clauses.append("DROP INDEX %s" % c)
+        clauses.append(indexdefs2[c])
 
-    if len(add) == 0:
-        indexes_to_add = None
+    return clauses
 
-    if len(drop) == 0:
-        indexes_to_drop = None
+def diff_fks(cursor, table, db1, db2):
+    # this query will fetch the constraint name and the 
+    # alter table statement needed to construct it.
 
-    if len(change) == 0:
-        indexes_to_change = None
+    query = """
+select
+    fk_part.constraint_name,
+    concat(
+              'ADD CONSTRAINT ',
+              fk_part.constraint_name,
+              ' FOREIGN KEY ',
+              '(', fk_part.fk_columns, ') REFERENCES ',
+              ref_part.referenced_table_name,
+              '(', ref_part.ref_columns, ')'
+    ) expr
+from
+(
+    select table_schema,
+           table_name,
+           constraint_name,
+           group_concat(column_name order by ordinal_position) fk_columns
+    from information_schema.key_column_usage
+    where referenced_table_name is not null
+    group by table_schema, table_name, constraint_name
+) fk_part
+inner join
+(
+    select table_schema,
+           table_name,
+           constraint_name,
+           referenced_table_name,
+           group_concat(referenced_column_name order by position_in_unique_constraint) ref_columns
+    from information_schema.key_column_usage
+    where referenced_table_name is not null
+    group by table_schema, table_name, constraint_name
+) ref_part
+on  fk_part.table_schema = ref_part.table_schema
+and fk_part.table_name = ref_part.table_name
+and fk_part.constraint_name = ref_part.constraint_name
+where fk_part.table_schema = '%(db)s'
+and fk_part.table_name = '%(table)s'
+"""
+    q1 = query % { "db" : db1, "table" : table }
+    q2 = query % { "db" : db2, "table" : table }
 
-    return (indexes_to_drop, indexes_to_add, indexes_to_change)
+    fkeys1 = {}
+    cursor.execute(q1)
+    for row in cursor.fetchall():
+        d = dict(zip(['constraint_name', 'expr'],
+                     row))
+        fkeys1[d['constraint_name']] = d['expr']
+
+    fkeys2 = {}
+    cursor.execute(q2)
+    for row in cursor.fetchall():
+        d = dict(zip(['constraint_name', 'expr'],
+                     row))
+        fkeys2[d['constraint_name']] = d['expr']
+
+    k1 = set(fkeys1.keys())
+    k2 = set(fkeys2.keys())
+
+    common = k1 & k2
+    drop = k1 - k2
+    add = k2 - k1
+
+    clauses = []
+    for d in drop:
+        clauses.append("DROP FOREIGN KEY %(k)s" % {
+                "k" : d })
+
+    for c in common:
+        clauses.append("DROP FOREIGN KEY %(k)s" % {
+                "k" : c })
+        clauses.append(fkeys2[c])
+
+    for a in add:
+        clauses.append(fkeys2[a])
+
+    return clauses
 
 def diff_table(cursor, table, db1, db2):
     query = "select column_name from information_schema.columns where table_schema = '%s' and table_name = '%s'"
@@ -365,14 +269,13 @@ def diff_table(cursor, table, db1, db2):
     q2 = query % (db2, table)
 
     columns1 = set()
-    columns2 = set()
-
     cursor.execute(q1)
     for row in cursor.fetchall():
         d = dict(zip(['column_name'],
                      row))
         columns1.add(d['column_name'])
 
+    columns2 = set()
     cursor.execute(q2)
     for row in cursor.fetchall():
         d = dict(zip(['column_name'],
@@ -382,40 +285,81 @@ def diff_table(cursor, table, db1, db2):
     common = columns1 & columns2
     columns_to_drop = columns1 - columns2
     columns_to_add = columns2 - columns1
-    
-    any_changes = False
-    if len(columns_to_drop) > 0:
-        any_changes = True
+
+    query = """
+select
+column_name,
+concat(
+column_name,
+' ',
+column_type,
+if(is_nullable = 'NO', ' NOT NULL', ''),
+case
+when column_default is null then ''
+when column_default = '' then ''
+else concat(' DEFAULT ', column_default)
+end,
+if(extra = '', '', concat(' ', extra)),
+if(column_comment = '', '', concat(' COMMENT ''', column_comment, ''''))
+) column_def
+ from information_schema.columns
+ where table_schema = '%(db)s'
+ and table_name = '%(table)s'
+ and column_name in (%(columns)s)
+"""
+
+    clauses = []
+
+    for d in columns_to_drop:
+        clauses.append("DROP COLUMN %s" % d)
 
     if len(columns_to_add) > 0:
-        any_changes = True
+        column_list = "'" + "','".join(columns_to_add) + "'"
+        q = query % {
+            "db" : db2,
+            "table" : table,
+            "columns" : column_list }
+        cursor.execute(q)
+        for row in cursor.fetchall():
+            d = dict(zip(['column_name', 'column_def'],
+                         row))
+            clauses.append("ADD COLUMN %s" % d['column_def'])
+            
+    if len(common) > 0:
+        column_list = "'" + "','".join(common) + "'"
+        q1 = query % {
+            "db" : db1,
+            "table" : table,
+            "columns" : column_list }
+        cursor.execute(q1)
+        d1 = {}
+        for row in cursor.fetchall():
+            d1[row[0]] = row[1]
 
-    column_diffs = {}
-    for c in common:
-        diffs = diff_column(cursor, table, c, db1, db2)
-        if diffs is not None:
-            column_diffs[c] = diffs
+        q2 = query % {
+            "db" : db2,
+            "table" : table,
+            "columns" : column_list }
+        cursor.execute(q2)
+        d2 = {}
+        for row in cursor.fetchall():
+            d2[row[0]] = row[1]
 
-    if len(column_diffs) > 0:
-        any_changes = True
+        for c in common:
+            if d1[c] != d2[c]:
+                clauses.append("MODIFY COLUMN %s" % d2[c])
 
-    if len(columns_to_drop) == 0:
-        columns_to_drop = None
-    else:
-        columns_to_drop = tuple(columns_to_drop)
+    clauses += diff_table_indexes(cursor, table, db1, db2)
+    clauses += diff_fks(cursor, table, db1, db2)
 
-    if len(columns_to_add) == 0:
-        columns_to_add = None
-    else:
-        columns_to_add = tuple(columns_to_add)
+    if len(clauses) > 0:
+        dml = "ALTER TABLE %(db)s.%(table)s " % {
+            "db" : db1,
+            "table" : table
+            }
 
-    if len(column_diffs) == 0:
-        column_diffs = None
-
-    (indexes_to_drop, indexes_to_add, indexes_to_change) = _diff_table_indexes(cursor, table, db1, db2)
-
-    return (columns_to_drop, columns_to_add, column_diffs,
-            indexes_to_drop, indexes_to_add, indexes_to_change)
+        return dml + ', '.join(clauses)
+            
 
 def diff_databases(cursor, db1, db2):
     tquery = "select table_name from information_schema.tables where table_schema = '%s'"

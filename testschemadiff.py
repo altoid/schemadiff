@@ -20,18 +20,8 @@ def create_tables(cursor, create_table_statements, db):
         cursor.execute(s)
 
 def apply_table_change(cursor, tableName, db1, db2):
-    (drop, add, diffs,
-     index_drop, index_add, index_diffs) = schemadiff.diff_table(
+    dml = schemadiff.diff_table(
         cursor, tableName, db1, db2)
-
-    dml = schemadiff.construct_altertable(cursor, db1, db2,
-                                          tableName,
-                                          drop=drop,
-                                          add=add,
-                                          diffs=diffs,
-                                          index_drop=index_drop,
-                                          index_add=index_add,
-                                          index_diffs=index_diffs)
 
     cursor.execute(dml)
 
@@ -107,8 +97,11 @@ class TestSetup(unittest.TestCase):
         self.dbconn.close()
     
 
-class TestTableDiff(unittest.TestCase):
-
+class TestTableDiffDML(unittest.TestCase):
+    """
+    test add/drop/change columns.  tests
+    correctness of DML statement but does not execute it.
+    """
     db1 = 'schemadiff_testtablediff_old'
     db2 = 'schemadiff_testtablediff_new'
     dbconn = None
@@ -151,14 +144,9 @@ class TestTableDiff(unittest.TestCase):
 
         self.assertEqual(schemadiff.dbchecksum(self.db1), schemadiff.dbchecksum(self.db2))
 
-        (drop, add, diffs) = schemadiff.diff_table(
-            self.cursor, tableName, self.db1, self.db2)[0:3]
+        dml = schemadiff.diff_table(
+            self.cursor, tableName, self.db1, self.db2)
 
-        self.assertIsNone(drop)
-        self.assertIsNone(add)
-        self.assertIsNone(diffs)
-
-        dml = schemadiff.construct_altertable(self.cursor, self.db1, self.db2, tableName)
         self.assertIsNone(dml)
 
     def testDrop1Column(self):
@@ -180,16 +168,10 @@ class TestTableDiff(unittest.TestCase):
 
         self.cursor.execute("use %s" % self.db2)
         self.cursor.execute(t2)
+        
+        dml = schemadiff.diff_table(
+            self.cursor, tableName, self.db1, self.db2)
 
-        (drop, add, diffs) = schemadiff.diff_table(
-            self.cursor, tableName, self.db1, self.db2)[0:3]
-
-        self.assertIsNotNone(drop)
-        self.assertIsNone(add)
-        self.assertIsNone(diffs)
-
-        self.assertTrue(len(drop) > 0)
-        dml = schemadiff.construct_altertable(self.cursor, self.db1, self.db2, tableName, drop=drop)
         control = "ALTER TABLE %(db)s.%(table)s DROP COLUMN objectId" % {
             "db" : self.db1,
             "table" : tableName
@@ -217,15 +199,9 @@ class TestTableDiff(unittest.TestCase):
         self.cursor.execute("use %s" % self.db2)
         self.cursor.execute(t2)
 
-        (drop, add, diffs) = schemadiff.diff_table(
-            self.cursor, tableName, self.db1, self.db2)[0:3]
+        dml = schemadiff.diff_table(
+            self.cursor, tableName, self.db1, self.db2)
 
-        self.assertIsNone(drop)
-        self.assertIsNone(add)
-        self.assertIsNotNone(diffs)
-
-        self.assertTrue(len(diffs) > 0)
-        dml = schemadiff.construct_altertable(self.cursor, self.db1, self.db2, tableName, diffs=diffs)
         control = "ALTER TABLE %(db)s.%(table)s MODIFY COLUMN objectType smallint(6) NOT NULL" % {
             "db" : self.db1,
             "table" : tableName
@@ -253,16 +229,10 @@ class TestTableDiff(unittest.TestCase):
         self.cursor.execute("use %s" % self.db2)
         self.cursor.execute(t2)
 
-        (drop, add, diffs) = schemadiff.diff_table(
-            self.cursor, tableName, self.db1, self.db2)[0:3]
+        dml = schemadiff.diff_table(
+            self.cursor, tableName, self.db1, self.db2)
 
-        self.assertIsNone(drop)
-        self.assertIsNone(add)
-        self.assertIsNotNone(diffs)
-
-        self.assertTrue(len(diffs) > 0)
-        dml = schemadiff.construct_altertable(self.cursor, self.db1, self.db2, tableName, diffs=diffs)
-        control = "ALTER TABLE %(db)s.%(table)s MODIFY COLUMN objectType int(11) NULL" % {
+        control = "ALTER TABLE %(db)s.%(table)s MODIFY COLUMN objectType int(11)" % {
             "db" : self.db1,
             "table" : tableName
             }
@@ -289,15 +259,9 @@ class TestTableDiff(unittest.TestCase):
         self.cursor.execute("use %s" % self.db2)
         self.cursor.execute(t2)
 
-        (drop, add, diffs) = schemadiff.diff_table(
-            self.cursor, tableName, self.db1, self.db2)[0:3]
+        dml = schemadiff.diff_table(
+            self.cursor, tableName, self.db1, self.db2)
 
-        self.assertIsNone(drop)
-        self.assertIsNone(add)
-        self.assertIsNotNone(diffs)
-
-        self.assertTrue(len(diffs) > 0)
-        dml = schemadiff.construct_altertable(self.cursor, self.db1, self.db2, tableName, diffs=diffs)
         control = "ALTER TABLE %(db)s.%(table)s MODIFY COLUMN objectType int(11) NOT NULL" % {
             "db" : self.db1,
             "table" : tableName
@@ -324,15 +288,9 @@ class TestTableDiff(unittest.TestCase):
         self.cursor.execute("use %s" % self.db2)
         self.cursor.execute(t2)
 
-        (drop, add, diffs) = schemadiff.diff_table(
-            self.cursor, tableName, self.db1, self.db2)[0:3]
+        dml = schemadiff.diff_table(
+            self.cursor, tableName, self.db1, self.db2)
 
-        self.assertIsNone(drop)
-        self.assertIsNotNone(add)
-        self.assertIsNone(diffs)
-
-        self.assertTrue(len(add) > 0)
-        dml = schemadiff.construct_altertable(self.cursor, self.db1, self.db2, tableName, add=add)
         control = "ALTER TABLE %(db)s.%(table)s ADD COLUMN objectId bigint(20) NOT NULL" % {
             "db" : self.db1,
             "table" : tableName
@@ -360,15 +318,9 @@ class TestTableDiff(unittest.TestCase):
         self.cursor.execute("use %s" % self.db2)
         self.cursor.execute(t2)
 
-        (drop, add, diffs) = schemadiff.diff_table(
-            self.cursor, tableName, self.db1, self.db2)[0:3]
+        dml = schemadiff.diff_table(
+            self.cursor, tableName, self.db1, self.db2)
 
-        self.assertIsNone(drop)
-        self.assertIsNotNone(add)
-        self.assertIsNone(diffs)
-
-        self.assertTrue(len(add) > 0)
-        dml = schemadiff.construct_altertable(self.cursor, self.db1, self.db2, tableName, add=add)
         control = "ALTER TABLE %(db)s.%(table)s ADD COLUMN objectId bigint(20)" % {
             "db" : self.db1,
             "table" : tableName
@@ -399,19 +351,9 @@ class TestTableDiff(unittest.TestCase):
         self.cursor.execute("use %s" % self.db2)
         self.cursor.execute(t2)
 
-        (drop, add, diffs) = schemadiff.diff_table(
-            self.cursor, tableName, self.db1, self.db2)[0:3]
+        dml = schemadiff.diff_table(
+            self.cursor, tableName, self.db1, self.db2)
 
-        self.assertIsNotNone(drop)
-        self.assertIsNotNone(add)
-        self.assertIsNotNone(diffs)
-
-        self.assertTrue(len(drop) > 0)
-        self.assertTrue(len(add) > 0)
-        self.assertTrue(len(diffs) > 0)
-
-        dml = schemadiff.construct_altertable(self.cursor, self.db1, self.db2, tableName,
-                                              drop=drop, add=add, diffs=diffs)
         control = ("ALTER TABLE %(db)s.%(table)s "
                    "DROP COLUMN objectId, "
                    "ADD COLUMN objectNamespaceAndId bigint(20) NOT NULL, "
@@ -427,6 +369,7 @@ class TestTableDiff(unittest.TestCase):
 
         self.cursor.close()
         self.dbconn.close()
+
     
 class TestAlterTable(unittest.TestCase):
     """
@@ -568,49 +511,6 @@ class TestIndexDiffDML(unittest.TestCase):
         self.cursor.execute("create database %(db)s" % { "db" : self.db1 })
         self.cursor.execute("create database %(db)s" % { "db" : self.db2 })
 
-    def testIndexDiff(self):
-        """
-        test diffs on a table where ordinary indexes are added,
-        deleted, and changed.  Only tests the correctness of the DML,
-        does not execute it.
-        """
-        tableName = 'mytable'
-
-        t1 = """CREATE TABLE `%(table)s` (
-  column1 int not null default 0,
-  column2 int not null default 0,
-  column3 int not null default 0,
-  column4 int not null default 0,
-  key key_change (column1),
-  key key_drop (column3)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
-
-        t2 = """CREATE TABLE `%(table)s` (
-  column1 int not null default 0,
-  column2 int not null default 0,
-  column3 int not null default 0,
-  column4 int not null default 0,
-  key key_change (column1, column2),
-  key key_add (column4)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
-
-        self.cursor.execute("use %s" % self.db1)
-        self.cursor.execute(t1)
-
-        self.cursor.execute("use %s" % self.db2)
-        self.cursor.execute(t2)
-
-        (drop, add, diffs) = schemadiff.diff_table(
-            self.cursor, tableName, self.db1, self.db2)[3:6]
-
-        drop_control = ast.literal_eval("{u'key_drop': {'key_columns': u'column3', 'index_name': u'key_drop', 'constraint_type': None}}")
-        add_control = ast.literal_eval("{u'key_add': {'key_columns': u'column4', 'index_name': u'key_add', 'constraint_type': None}}")
-        diffs_control = ast.literal_eval("{u'key_change': {'key_columns': u'column1,column2', 'index_name': u'key_change', 'constraint_type': None}}")
-
-        self.assertDictEqual(drop_control, drop)
-        self.assertDictEqual(add_control, add)
-        self.assertDictEqual(diffs_control, diffs)
-
     def testDropIndex(self):
         """
         test diffs on a table where ordinary indexes are added, deleted, and changed.
@@ -638,16 +538,8 @@ class TestIndexDiffDML(unittest.TestCase):
         self.cursor.execute("use %s" % self.db2)
         self.cursor.execute(t2)
 
-        (index_drop, index_add, index_diffs) = schemadiff.diff_table(
-            self.cursor, tableName, self.db1, self.db2)[3:6]
-
-        self.assertIsNotNone(index_drop)
-        self.assertIsNone(index_add)
-        self.assertIsNone(index_diffs)
-
-        dml = schemadiff.construct_altertable(self.cursor, self.db1, self.db2,
-                                              tableName, index_drop=index_drop)
-
+        dml = schemadiff.diff_table(
+            self.cursor, tableName, self.db1, self.db2)
         control = ("ALTER TABLE %(db)s.%(table)s "
                    "DROP INDEX key_drop") % {
             "db" : self.db1,
@@ -682,19 +574,10 @@ class TestIndexDiffDML(unittest.TestCase):
         self.cursor.execute("use %s" % self.db2)
         self.cursor.execute(t2)
 
-        (index_drop, index_add, index_diffs) = schemadiff.diff_table(
-            self.cursor, tableName, self.db1, self.db2)[3:6]
-
-        self.assertIsNone(index_drop)
-        self.assertIsNotNone(index_add)
-        self.assertIsNone(index_diffs)
-
-        dml = schemadiff.construct_altertable(self.cursor, self.db1, self.db2,
-                                              tableName,
-                                              index_add=index_add)
-
+        dml = schemadiff.diff_table(
+            self.cursor, tableName, self.db1, self.db2)
         control = ("ALTER TABLE %(db)s.%(table)s "
-                   "ADD INDEX key_add (column3)") % {
+                   "ADD KEY key_add(column3)") % {
             "db" : self.db1,
             "table" : tableName }
         self.assertEqual(control, dml)
@@ -727,24 +610,12 @@ class TestIndexDiffDML(unittest.TestCase):
         self.cursor.execute("use %s" % self.db2)
         self.cursor.execute(t2)
 
-        (index_drop, index_add, index_diffs) = schemadiff.diff_table(
-            self.cursor, tableName, self.db1, self.db2)[3:6]
-
-        dml = schemadiff.construct_altertable(self.cursor, self.db1, self.db2,
-                                              tableName,
-                                              index_diffs=index_diffs)
-
-        self.assertIsNone(index_drop)
-        self.assertIsNone(index_add)
-        self.assertIsNotNone(index_diffs)
-
-        dml = schemadiff.construct_altertable(self.cursor, self.db1, self.db2,
-                                              tableName,
-                                              index_diffs=index_diffs)
+        dml = schemadiff.diff_table(
+            self.cursor, tableName, self.db1, self.db2)
 
         control = ("ALTER TABLE %(db)s.%(table)s "
                    "DROP INDEX key_add, "
-                   "ADD INDEX key_add (column2,column3)"
+                   "ADD KEY key_add(column2,column3)"
                    ) % {
             "db" : self.db1,
             "table" : tableName }
@@ -778,15 +649,8 @@ class TestIndexDiffDML(unittest.TestCase):
         self.cursor.execute("use %s" % self.db2)
         self.cursor.execute(t2)
 
-        (index_drop, index_add, index_diffs) = schemadiff.diff_table(
-            self.cursor, tableName, self.db1, self.db2)[3:6]
-
-        self.assertIsNotNone(index_drop)
-        self.assertIsNone(index_add)
-        self.assertIsNone(index_diffs)
-
-        dml = schemadiff.construct_altertable(self.cursor, self.db1, self.db2,
-                                              tableName, index_drop=index_drop)
+        dml = schemadiff.diff_table(
+            self.cursor, tableName, self.db1, self.db2)
 
         control = ("ALTER TABLE %(db)s.%(table)s "
                    "DROP PRIMARY KEY") % {
@@ -818,19 +682,10 @@ class TestIndexDiffDML(unittest.TestCase):
         self.cursor.execute("use %s" % self.db2)
         self.cursor.execute(t2)
 
-        (index_drop, index_add, index_diffs) = schemadiff.diff_table(
-            self.cursor, tableName, self.db1, self.db2)[3:6]
-
-        self.assertIsNone(index_drop)
-        self.assertIsNotNone(index_add)
-        self.assertIsNone(index_diffs)
-
-        dml = schemadiff.construct_altertable(self.cursor, self.db1, self.db2,
-                                              tableName,
-                                              index_add=index_add)
-
+        dml = schemadiff.diff_table(
+            self.cursor, tableName, self.db1, self.db2)
         control = ("ALTER TABLE %(db)s.%(table)s "
-                   "ADD PRIMARY KEY (column1,column2)") % {
+                   "ADD PRIMARY KEY(column1,column2)") % {
             "db" : self.db1,
             "table" : tableName }
         self.assertEqual(control, dml)
@@ -860,20 +715,11 @@ class TestIndexDiffDML(unittest.TestCase):
         self.cursor.execute("use %s" % self.db2)
         self.cursor.execute(t2)
 
-        (index_drop, index_add, index_diffs) = schemadiff.diff_table(
-            self.cursor, tableName, self.db1, self.db2)[3:6]
-
-        self.assertIsNone(index_drop)
-        self.assertIsNone(index_add)
-        self.assertIsNotNone(index_diffs)
-
-        dml = schemadiff.construct_altertable(self.cursor, self.db1, self.db2,
-                                              tableName,
-                                              index_diffs=index_diffs)
-
+        dml = schemadiff.diff_table(
+            self.cursor, tableName, self.db1, self.db2)
         control = ("ALTER TABLE %(db)s.%(table)s "
                    "DROP PRIMARY KEY, "
-                   "ADD PRIMARY KEY (column1,column2)"
+                   "ADD PRIMARY KEY(column1,column2)"
                    ) % {
             "db" : self.db1,
             "table" : tableName }
@@ -1343,28 +1189,73 @@ class TestUniqueIndex(unittest.TestCase):
         self.cursor.close()
         self.dbconn.close()
 
-class TestFK(unittest.TestCase):
-    db1 = 'schemadiff_testforeignkey_old'
-    db2 = 'schemadiff_testforeignkey_new'
-    dbconn = None
-    cursor = None
-
-    def setUp(self):
-        self.dbconn = dsn.getConnection()
-        self.cursor = self.dbconn.cursor()
-
-        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db1 })
-        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db2 })
-        self.cursor.execute("create database %(db)s" % { "db" : self.db1 })
-        self.cursor.execute("create database %(db)s" % { "db" : self.db2 })
-
-    def tearDown(self):
-        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db1 })
-        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db2 })
-
-        self.cursor.close()
-        self.dbconn.close()
-
+#class TestFK(unittest.TestCase):
+#    db1 = 'fk_old'
+#    db2 = 'fk_new'
+#    dbconn = None
+#    cursor = None
+#
+#    def setUp(self):
+#        self.dbconn = dsn.getConnection()
+#        self.cursor = self.dbconn.cursor()
+#
+#        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db1 })
+#        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db2 })
+#        self.cursor.execute("create database %(db)s" % { "db" : self.db1 })
+#        self.cursor.execute("create database %(db)s" % { "db" : self.db2 })
+#
+#    def testChangeFK(self):
+#
+#        tableName = 'mytable'
+#
+#        ref = """CREATE TABLE `reftable` (
+#  column1 int not null default 0,
+#  column2 int not null default 0,
+#  column3 int not null default 0,
+#  column4 int not null default 0,
+#  PRIMARY KEY(column1, column2)
+#) ENGINE=InnoDB DEFAULT CHARSET=utf8"""
+#
+#        t1 = """CREATE TABLE `%(table)s` (
+#  column1 int not null default 0,
+#  column2 int not null default 0,
+#  column3 int not null default 0,
+#  column4 int not null default 0,
+#  KEY fk (column1, column2),
+#  CONSTRAINT `fk` foreign key(column1, column2) REFERENCES reftable(column1, column2)
+#) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
+#
+#        t2 = """CREATE TABLE `%(table)s` (
+#  column1 int not null default 0,
+#  column2 int not null default 0,
+#  column3 int not null default 0,
+#  column4 int not null default 0,
+#  KEY fk (column1, column2),
+#  CONSTRAINT `fk` foreign key(column1) REFERENCES reftable(column1)
+#) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
+#
+#        create_tables(self.cursor, [ref, t1], self.db1)
+#        create_tables(self.cursor, [ref, t2], self.db2)
+#
+#        dml = schemadiff.construct_altertable(self.cursor,
+#                                              self.db1,
+#                                              self.db2,
+#                                              tableName)
+#
+#        print dml
+#        (cs1, cs2) = apply_table_change(self.cursor,
+#                                        tableName,
+#                                        self.db1,
+#                                        self.db2)
+#        self.assertEqual(cs1, cs2)
+#
+#    def tearDown(self):
+##        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db1 })
+##        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db2 })
+##
+##        self.cursor.close()
+##        self.dbconn.close()
+#        pass
 
 if __name__ == '__main__':
     filterwarnings('ignore', category = MySQLdb.Warning)
