@@ -20,7 +20,10 @@
 #
 # TODO:  handle fulltext indexes
 #
-# TODO:  handle unique indexes
+# TODO:  foreign keys
+#        - drop
+#        - add
+#        - change ON UPDATE, ON DELETE
 
 import MySQLdb
 # docs at http://mysql-python.sourceforge.net/MySQLdb.html
@@ -247,8 +250,12 @@ def construct_altertable(cursor, fromdb, todb, table, **kwargs):
 
     if index_add is not None:
         for i in index_add.keys():
-            if i == 'PRIMARY':
+            if index_add[i]['constraint_type'] == 'PRIMARY KEY':
                 clauses.append("ADD PRIMARY KEY (%(columns)s)" % {
+                        "columns" : index_add[i]['key_columns'] })
+            elif index_add[i]['constraint_type'] == 'UNIQUE':
+                clauses.append("ADD UNIQUE KEY %(index)s (%(columns)s)" % {
+                        "index" : i,
                         "columns" : index_add[i]['key_columns'] })
             else:
                 clauses.append("ADD INDEX %(index)s (%(columns)s)" % {
@@ -257,9 +264,15 @@ def construct_altertable(cursor, fromdb, todb, table, **kwargs):
 
     if index_diffs is not None:
         for i in index_diffs.keys():
-            if i == 'PRIMARY':
+            if index_diffs[i]['constraint_type'] == 'PRIMARY KEY':
                 clauses.append("DROP PRIMARY KEY")
                 clauses.append("ADD PRIMARY KEY (%(columns)s)" % {
+                        "columns" : index_diffs[i]['key_columns'] })
+            elif index_diffs[i]['constraint_type'] == 'UNIQUE':
+                clauses.append("DROP INDEX %(index)s" % {
+                        "index" : i })
+                clauses.append("ADD UNIQUE INDEX %(index)s (%(columns)s)" % {
+                        "index" : i,
                         "columns" : index_diffs[i]['key_columns'] })
             else:
                 clauses.append("DROP INDEX %(index)s" % {
