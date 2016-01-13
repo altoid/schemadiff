@@ -14,13 +14,12 @@ import hashlib
 import dsn
 from warnings import filterwarnings
 
-def apply_table_change(cursor, tableName, t1, db1, t2, db2):
-    cursor.execute("use %s" % db1)
-    cursor.execute(t1)
+def create_tables(cursor, create_table_statements, db):
+    cursor.execute("use %s" % db)
+    for s in create_table_statements:
+        cursor.execute(s)
 
-    cursor.execute("use %s" % db2)
-    cursor.execute(t2)
-
+def apply_table_change(cursor, tableName, db1, db2):
     (drop, add, diffs,
      index_drop, index_add, index_diffs) = schemadiff.diff_table(
         cursor, tableName, db1, db2)
@@ -462,10 +461,12 @@ class TestAlterTable(unittest.TestCase):
   `deleteDate` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
 
+        create_tables(self.cursor, [t1], self.db1)
+        create_tables(self.cursor, [t2], self.db2)
         (cs1, cs2) = apply_table_change(self.cursor,
                                         tableName,
-                                        t1, self.db1,
-                                        t2, self.db2)
+                                        self.db1,
+                                        self.db2)
         self.assertEqual(cs1, cs2)
 
     def testDrop1Column(self):
@@ -482,10 +483,12 @@ class TestAlterTable(unittest.TestCase):
   `deleteDate` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
 
+        create_tables(self.cursor, [t1], self.db1)
+        create_tables(self.cursor, [t2], self.db2)
         (cs1, cs2) = apply_table_change(self.cursor,
                                         tableName,
-                                        t1, self.db1,
-                                        t2, self.db2)
+                                        self.db1,
+                                        self.db2)
         self.assertEqual(cs1, cs2)
 
     def testTableDiff(self):
@@ -505,10 +508,12 @@ class TestAlterTable(unittest.TestCase):
   `objectNamespaceAndId` bigint(20) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
 
+        create_tables(self.cursor, [t1], self.db1)
+        create_tables(self.cursor, [t2], self.db2)
         (cs1, cs2) = apply_table_change(self.cursor,
                                         tableName,
-                                        t1, self.db1,
-                                        t2, self.db2)
+                                        self.db1,
+                                        self.db2)
         self.assertEqual(cs1, cs2)
 
     def testColumnDefaults(self):
@@ -531,10 +536,12 @@ class TestAlterTable(unittest.TestCase):
   new_column_with_default     int not null default 44
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
 
+        create_tables(self.cursor, [t1], self.db1)
+        create_tables(self.cursor, [t2], self.db2)
         (cs1, cs2) = apply_table_change(self.cursor,
                                         tableName,
-                                        t1, self.db1,
-                                        t2, self.db2)
+                                        self.db1,
+                                        self.db2)
         self.assertEqual(cs1, cs2)
 
     def tearDown(self):
@@ -923,10 +930,12 @@ class TestIndexDiff(unittest.TestCase):
   key key_add (column4)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
 
+        create_tables(self.cursor, [t1], self.db1)
+        create_tables(self.cursor, [t2], self.db2)
         (cs1, cs2) = apply_table_change(self.cursor,
                                         tableName,
-                                        t1, self.db1,
-                                        t2, self.db2)
+                                        self.db1,
+                                        self.db2)
         self.assertEqual(cs1, cs2)
 
     def testDropIndex(self):
@@ -950,10 +959,12 @@ class TestIndexDiff(unittest.TestCase):
   column4 int not null default 0
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
 
+        create_tables(self.cursor, [t1], self.db1)
+        create_tables(self.cursor, [t2], self.db2)
         (cs1, cs2) = apply_table_change(self.cursor,
                                         tableName,
-                                        t1, self.db1,
-                                        t2, self.db2)
+                                        self.db1,
+                                        self.db2)
         self.assertEqual(cs1, cs2)
 
     def testAddIndex(self):
@@ -977,10 +988,12 @@ class TestIndexDiff(unittest.TestCase):
   key key_add (column3)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
 
+        create_tables(self.cursor, [t1], self.db1)
+        create_tables(self.cursor, [t2], self.db2)
         (cs1, cs2) = apply_table_change(self.cursor,
                                         tableName,
-                                        t1, self.db1,
-                                        t2, self.db2)
+                                        self.db1,
+                                        self.db2)
         self.assertEqual(cs1, cs2)
 
     def testChangeIndex(self):
@@ -1002,10 +1015,12 @@ class TestIndexDiff(unittest.TestCase):
   key key_add (column2,column3)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
 
+        create_tables(self.cursor, [t1], self.db1)
+        create_tables(self.cursor, [t2], self.db2)
         (cs1, cs2) = apply_table_change(self.cursor,
                                         tableName,
-                                        t1, self.db1,
-                                        t2, self.db2)
+                                        self.db1,
+                                        self.db2)
         self.assertEqual(cs1, cs2)
 
     def testDropPK(self):
@@ -1029,10 +1044,12 @@ class TestIndexDiff(unittest.TestCase):
   column4 int not null default 0
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
 
+        create_tables(self.cursor, [t1], self.db1)
+        create_tables(self.cursor, [t2], self.db2)
         (cs1, cs2) = apply_table_change(self.cursor,
                                         tableName,
-                                        t1, self.db1,
-                                        t2, self.db2)
+                                        self.db1,
+                                        self.db2)
         self.assertEqual(cs1, cs2)
 
     def testAddPK(self):
@@ -1053,10 +1070,12 @@ class TestIndexDiff(unittest.TestCase):
   PRIMARY KEY(column1, column2)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
 
+        create_tables(self.cursor, [t1], self.db1)
+        create_tables(self.cursor, [t2], self.db2)
         (cs1, cs2) = apply_table_change(self.cursor,
                                         tableName,
-                                        t1, self.db1,
-                                        t2, self.db2)
+                                        self.db1,
+                                        self.db2)
         self.assertEqual(cs1, cs2)
 
     def testChangePK(self):
@@ -1078,10 +1097,12 @@ class TestIndexDiff(unittest.TestCase):
   PRIMARY KEY(column1, column2)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
 
+        create_tables(self.cursor, [t1], self.db1)
+        create_tables(self.cursor, [t2], self.db2)
         (cs1, cs2) = apply_table_change(self.cursor,
                                         tableName,
-                                        t1, self.db1,
-                                        t2, self.db2)
+                                        self.db1,
+                                        self.db2)
         self.assertEqual(cs1, cs2)
 
     def tearDown(self):
@@ -1093,8 +1114,6 @@ class TestIndexDiff(unittest.TestCase):
 
 
 class TestUniqueIndex(unittest.TestCase):
-    # changing has to be done as drop-then-add
-
     db1 = 'schemadiff_testuniqueindex_old'
     db2 = 'schemadiff_testuniqueindex_new'
     dbconn = None
@@ -1130,10 +1149,12 @@ class TestUniqueIndex(unittest.TestCase):
   UNIQUE KEY(column1, column2)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
 
+        create_tables(self.cursor, [t1], self.db1)
+        create_tables(self.cursor, [t2], self.db2)
         (cs1, cs2) = apply_table_change(self.cursor,
                                         tableName,
-                                        t1, self.db1,
-                                        t2, self.db2)
+                                        self.db1,
+                                        self.db2)
         self.assertEqual(cs1, cs2)
 
     def testDropIndex(self):
@@ -1157,10 +1178,12 @@ class TestUniqueIndex(unittest.TestCase):
   column4 int not null default 0
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
 
+        create_tables(self.cursor, [t1], self.db1)
+        create_tables(self.cursor, [t2], self.db2)
         (cs1, cs2) = apply_table_change(self.cursor,
                                         tableName,
-                                        t1, self.db1,
-                                        t2, self.db2)
+                                        self.db1,
+                                        self.db2)
         self.assertEqual(cs1, cs2)
 
     def testChangeIndex(self):
@@ -1185,10 +1208,12 @@ class TestUniqueIndex(unittest.TestCase):
   UNIQUE KEY(column1, column2)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
 
+        create_tables(self.cursor, [t1], self.db1)
+        create_tables(self.cursor, [t2], self.db2)
         (cs1, cs2) = apply_table_change(self.cursor,
                                         tableName,
-                                        t1, self.db1,
-                                        t2, self.db2)
+                                        self.db1,
+                                        self.db2)
         self.assertEqual(cs1, cs2)
 
     def testMakeUnique(self):
@@ -1213,10 +1238,12 @@ class TestUniqueIndex(unittest.TestCase):
   UNIQUE KEY(column1, column2)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
 
+        create_tables(self.cursor, [t1], self.db1)
+        create_tables(self.cursor, [t2], self.db2)
         (cs1, cs2) = apply_table_change(self.cursor,
                                         tableName,
-                                        t1, self.db1,
-                                        t2, self.db2)
+                                        self.db1,
+                                        self.db2)
         self.assertEqual(cs1, cs2)
 
     def testMakeNonUnique(self):
@@ -1241,10 +1268,12 @@ class TestUniqueIndex(unittest.TestCase):
   KEY(column1, column2)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
 
+        create_tables(self.cursor, [t1], self.db1)
+        create_tables(self.cursor, [t2], self.db2)
         (cs1, cs2) = apply_table_change(self.cursor,
                                         tableName,
-                                        t1, self.db1,
-                                        t2, self.db2)
+                                        self.db1,
+                                        self.db2)
         self.assertEqual(cs1, cs2)
 
     def testMakePKUnique(self):
@@ -1269,10 +1298,12 @@ class TestUniqueIndex(unittest.TestCase):
   UNIQUE KEY(column1, column2)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
 
+        create_tables(self.cursor, [t1], self.db1)
+        create_tables(self.cursor, [t2], self.db2)
         (cs1, cs2) = apply_table_change(self.cursor,
                                         tableName,
-                                        t1, self.db1,
-                                        t2, self.db2)
+                                        self.db1,
+                                        self.db2)
         self.assertEqual(cs1, cs2)
 
     def testMakeUniquePK(self):
@@ -1297,10 +1328,12 @@ class TestUniqueIndex(unittest.TestCase):
   PRIMARY KEY(column1, column2)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
 
+        create_tables(self.cursor, [t1], self.db1)
+        create_tables(self.cursor, [t2], self.db2)
         (cs1, cs2) = apply_table_change(self.cursor,
                                         tableName,
-                                        t1, self.db1,
-                                        t2, self.db2)
+                                        self.db1,
+                                        self.db2)
         self.assertEqual(cs1, cs2)
 
     def tearDown(self):
@@ -1309,6 +1342,29 @@ class TestUniqueIndex(unittest.TestCase):
 
         self.cursor.close()
         self.dbconn.close()
+
+class TestFK(unittest.TestCase):
+    db1 = 'schemadiff_testforeignkey_old'
+    db2 = 'schemadiff_testforeignkey_new'
+    dbconn = None
+    cursor = None
+
+    def setUp(self):
+        self.dbconn = dsn.getConnection()
+        self.cursor = self.dbconn.cursor()
+
+        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db1 })
+        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db2 })
+        self.cursor.execute("create database %(db)s" % { "db" : self.db1 })
+        self.cursor.execute("create database %(db)s" % { "db" : self.db2 })
+
+    def tearDown(self):
+        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db1 })
+        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db2 })
+
+        self.cursor.close()
+        self.dbconn.close()
+
 
 if __name__ == '__main__':
     filterwarnings('ignore', category = MySQLdb.Warning)
