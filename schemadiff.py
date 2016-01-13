@@ -163,22 +163,30 @@ and (constraint_type <> 'foreign key' or constraint_type is null)
     drop = indexes_1 - indexes_2
     change = indexes_1 & indexes_2
 
-    clauses = []
+    drop_clauses = []
+    add_clauses = []
     for d in drop:
         if d == 'PRIMARY':
-            clauses.append("DROP PRIMARY KEY")
+            drop_clauses.append("DROP PRIMARY KEY")
         else:
-            clauses.append("DROP INDEX %s" % d)
+            drop_clauses.append("DROP INDEX %s" % d)
 
     for a in add:
-        clauses.append(indexdefs2[a])
+        add_clauses.append(indexdefs2[a])
 
     for c in change:
         if c == 'PRIMARY':
-            clauses.append("DROP PRIMARY KEY")
+            drop_clauses.append("DROP PRIMARY KEY")
         else:
-            clauses.append("DROP INDEX %s" % c)
-        clauses.append(indexdefs2[c])
+            drop_clauses.append("DROP INDEX %s" % c)
+        add_clauses.append(indexdefs2[c])
+
+    clauses = []
+    if len(drop_clauses) > 0:
+        clauses.append(', '.join(drop_clauses))
+
+    if len(add_clauses) > 0:
+        clauses.append(', '.join(add_clauses))
 
     return clauses
 
@@ -248,18 +256,26 @@ and fk_part.table_name = '%(table)s'
     drop = k1 - k2
     add = k2 - k1
 
-    clauses = []
+    drop_clauses = []
+    add_clauses = []
     for d in drop:
-        clauses.append("DROP FOREIGN KEY %(k)s" % {
+        drop_clauses.append("DROP FOREIGN KEY %(k)s" % {
                 "k" : d })
 
     for c in common:
-        clauses.append("DROP FOREIGN KEY %(k)s" % {
+        drop_clauses.append("DROP FOREIGN KEY %(k)s" % {
                 "k" : c })
-        clauses.append(fkeys2[c])
+        add_clauses.append(fkeys2[c])
 
     for a in add:
-        clauses.append(fkeys2[a])
+        add_clauses.append(fkeys2[a])
+
+    clauses = []
+    if len(drop_clauses) > 0:
+        clauses.append(', '.join(drop_clauses))
+
+    if len(add_clauses) > 0:
+        clauses.append(', '.join(add_clauses))
 
     return clauses
 
@@ -349,7 +365,11 @@ if(column_comment = '', '', concat(' COMMENT ''', column_comment, ''''))
             if d1[c] != d2[c]:
                 clauses.append("MODIFY COLUMN %s" % d2[c])
 
-    return clauses
+    column_clauses = []
+    if len(clauses) > 0:
+        column_clauses.append(', '.join(clauses))
+
+    return column_clauses
 
 def diff_table(cursor, table, db1, db2):
     clauses = []
@@ -358,13 +378,18 @@ def diff_table(cursor, table, db1, db2):
     clauses += diff_table_indexes(cursor, table, db1, db2)
     clauses += diff_fks(cursor, table, db1, db2)
 
+    dmls = []
     if len(clauses) > 0:
-        dml = "ALTER TABLE %(db)s.%(table)s " % {
-            "db" : db1,
-            "table" : table
-            }
+        for c in clauses:
+            dml = "ALTER TABLE %(db)s.%(table)s %(therest)s" % {
+                "db" : db1,
+                "table" : table,
+                "therest" : c
+                }
 
-        return dml + ', '.join(clauses)
+            dmls.append(dml)
+
+    return dmls
             
 
 def diff_databases(cursor, db1, db2):
