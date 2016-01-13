@@ -263,7 +263,7 @@ and fk_part.table_name = '%(table)s'
 
     return clauses
 
-def diff_table(cursor, table, db1, db2):
+def diff_table_columns(cursor, table, db1, db2):
     query = "select column_name from information_schema.columns where table_schema = '%s' and table_name = '%s'"
     q1 = query % (db1, table)
     q2 = query % (db2, table)
@@ -349,6 +349,12 @@ if(column_comment = '', '', concat(' COMMENT ''', column_comment, ''''))
             if d1[c] != d2[c]:
                 clauses.append("MODIFY COLUMN %s" % d2[c])
 
+    return clauses
+
+def diff_table(cursor, table, db1, db2):
+    clauses = []
+
+    clauses += diff_table_columns(cursor, table, db1, db2)
     clauses += diff_table_indexes(cursor, table, db1, db2)
     clauses += diff_fks(cursor, table, db1, db2)
 
