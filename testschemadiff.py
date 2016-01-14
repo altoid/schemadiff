@@ -24,7 +24,6 @@ def apply_table_change(cursor, tableName, db1, db2):
         cursor, tableName, db1, db2)
 
     for dml in dmls:
-        print dml
         cursor.execute(dml)
 
     cs1 = schemadiff.dbchecksum(db1)
@@ -556,7 +555,6 @@ class TestIndexDiffDML(unittest.TestCase):
             "db" : self.db1,
             "table" : tableName }
         self.assertEqual(control, dmls[0])
-
 
     def testAddIndex(self):
         """
@@ -1217,6 +1215,170 @@ class TestUniqueIndex(unittest.TestCase):
         self.cursor.close()
         self.dbconn.close()
 
+class TestFKDiffDML(unittest.TestCase):
+    db1 = 'fk_old'
+    db2 = 'fk_new'
+    dbconn = None
+    cursor = None
+
+    def setUp(self):
+        self.dbconn = dsn.getConnection()
+        self.cursor = self.dbconn.cursor()
+
+        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db1 })
+        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db2 })
+        self.cursor.execute("create database %(db)s" % { "db" : self.db1 })
+        self.cursor.execute("create database %(db)s" % { "db" : self.db2 })
+
+    def testChangeFK(self):
+        """
+        change the columns in a foreign key.
+        """
+        tableName = 'mytable'
+
+        ref = """CREATE TABLE `reftable` (
+  column1 int not null default 0,
+  column2 int not null default 0,
+  column3 int not null default 0,
+  column4 int not null default 0,
+  PRIMARY KEY(column1, column2)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8"""
+
+        t1 = """CREATE TABLE `%(table)s` (
+  column1 int not null default 0,
+  column2 int not null default 0,
+  column3 int not null default 0,
+  column4 int not null default 0,
+  KEY fk (column1, column2),
+  CONSTRAINT `fk` foreign key(column1, column2) REFERENCES reftable(column1, column2)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
+
+        t2 = """CREATE TABLE `%(table)s` (
+  column1 int not null default 0,
+  column2 int not null default 0,
+  column3 int not null default 0,
+  column4 int not null default 0,
+  KEY fk (column1, column2),
+  CONSTRAINT `fk` foreign key(column1) REFERENCES reftable(column1)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
+
+        create_tables(self.cursor, [ref, t1], self.db1)
+        create_tables(self.cursor, [ref, t2], self.db2)
+
+        dmls = schemadiff.diff_table(
+            self.cursor, tableName, self.db1, self.db2)
+        self.assertEqual(2, len(dmls))
+
+        control1 = ("ALTER TABLE %(db)s.%(table)s "
+                    "DROP FOREIGN KEY fk"
+                   ) % {
+            "db" : self.db1,
+            "table" : tableName }
+        self.assertEqual(control1, dmls[0])
+
+        control2 = ("ALTER TABLE %(db)s.%(table)s "
+                    "ADD CONSTRAINT fk FOREIGN KEY (column1) REFERENCES reftable(column1)"
+                   ) % {
+            "db" : self.db1,
+            "table" : tableName }
+        self.assertEqual(control2, dmls[1])
+
+    def testDropFK(self):
+        """
+        drop a foreign key.
+        """
+        tableName = 'mytable'
+
+        ref = """CREATE TABLE `reftable` (
+  column1 int not null default 0,
+  column2 int not null default 0,
+  column3 int not null default 0,
+  column4 int not null default 0,
+  PRIMARY KEY(column1, column2)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8"""
+
+        t1 = """CREATE TABLE `%(table)s` (
+  column1 int not null default 0,
+  column2 int not null default 0,
+  column3 int not null default 0,
+  column4 int not null default 0,
+  KEY fk (column1, column2),
+  CONSTRAINT `fk` foreign key(column1, column2) REFERENCES reftable(column1, column2)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
+
+        t2 = """CREATE TABLE `%(table)s` (
+  column1 int not null default 0,
+  column2 int not null default 0,
+  column3 int not null default 0,
+  column4 int not null default 0,
+  KEY fk (column1, column2)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
+
+        create_tables(self.cursor, [ref, t1], self.db1)
+        create_tables(self.cursor, [ref, t2], self.db2)
+
+        dmls = schemadiff.diff_table(
+            self.cursor, tableName, self.db1, self.db2)
+        self.assertEqual(1, len(dmls))
+
+        control1 = ("ALTER TABLE %(db)s.%(table)s "
+                    "DROP FOREIGN KEY fk"
+                   ) % {
+            "db" : self.db1,
+            "table" : tableName }
+        self.assertEqual(control1, dmls[0])
+
+    def testAddFK(self):
+        """
+        add a foreign key
+        """
+        tableName = 'mytable'
+
+        ref = """CREATE TABLE `reftable` (
+  column1 int not null default 0,
+  column2 int not null default 0,
+  column3 int not null default 0,
+  column4 int not null default 0,
+  PRIMARY KEY(column1, column2)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8"""
+
+        t1 = """CREATE TABLE `%(table)s` (
+  column1 int not null default 0,
+  column2 int not null default 0,
+  column3 int not null default 0,
+  column4 int not null default 0
+) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
+
+        t2 = """CREATE TABLE `%(table)s` (
+  column1 int not null default 0,
+  column2 int not null default 0,
+  column3 int not null default 0,
+  column4 int not null default 0,
+  KEY fk (column1, column2),
+  CONSTRAINT `fk` foreign key(column1, column2) REFERENCES reftable(column1, column2)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
+
+        create_tables(self.cursor, [ref, t1], self.db1)
+        create_tables(self.cursor, [ref, t2], self.db2)
+
+        dmls = schemadiff.diff_table(
+            self.cursor, tableName, self.db1, self.db2)
+        self.assertEqual(1, len(dmls))
+        control1 = ("ALTER TABLE %(db)s.%(table)s "
+                    "ADD CONSTRAINT fk FOREIGN KEY (column1,column2) REFERENCES reftable(column1,column2)"
+                   ) % {
+            "db" : self.db1,
+            "table" : tableName }
+        self.assertEqual(control1, dmls[0])
+
+    def tearDown(self):
+#        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db1 })
+#        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db2 })
+#
+#        self.cursor.close()
+#        self.dbconn.close()
+        pass
+
 class TestFKDiff(unittest.TestCase):
     db1 = 'fk_old'
     db2 = 'fk_new'
@@ -1270,6 +1432,7 @@ class TestFKDiff(unittest.TestCase):
                                         tableName,
                                         self.db1,
                                         self.db2)
+
         self.assertEqual(cs1, cs2)
 
     def testDropFK(self):
@@ -1309,12 +1472,6 @@ class TestFKDiff(unittest.TestCase):
                                         tableName,
                                         self.db1,
                                         self.db2)
-
-        print "-------------- %s" % self.db1
-        print schemadiff.dbdump(self.db1)
-        print "-------------- %s" % self.db2
-        print schemadiff.dbdump(self.db2)
-
         self.assertEqual(cs1, cs2)
 
     def testAddFK(self):
@@ -1344,11 +1501,12 @@ class TestFKDiff(unittest.TestCase):
   column3 int not null default 0,
   column4 int not null default 0,
   KEY fk (column1, column2),
-  CONSTRAINT `fk` foreign key(column1, column2) REFERENCES reftable(column1, column2)
+  CONSTRAINT `pookus` foreign key(column1, column2) REFERENCES reftable(column1, column2)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
 
         create_tables(self.cursor, [ref, t1], self.db1)
         create_tables(self.cursor, [ref, t2], self.db2)
+        
         (cs1, cs2) = apply_table_change(self.cursor,
                                         tableName,
                                         self.db1,
