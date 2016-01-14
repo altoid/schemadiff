@@ -21,8 +21,6 @@
 # TODO:  handle fulltext indexes
 #
 # TODO:  foreign keys
-#        - drop
-#        - add
 #        - change ON UPDATE, ON DELETE
 
 import MySQLdb
@@ -266,99 +264,6 @@ from
 
     return clauses
 
-def diff_fks(cursor, table, db1, db2):
-    # this query will fetch the constraint name and the 
-    # alter table statement needed to construct it.
-
-    query = """
-select
-    fk_part.constraint_name,
-    concat(
-              'ADD CONSTRAINT ',
-              fk_part.constraint_name,
-              ' FOREIGN KEY ',
-              '(', fk_part.fk_columns, ') REFERENCES ',
-              ref_part.referenced_table_name,
-              '(', ref_part.ref_columns, ')'
-    ) expr
-from
-(
-    select table_schema,
-           table_name,
-           constraint_name,
-           group_concat(column_name order by ordinal_position) fk_columns
-    from information_schema.key_column_usage
-    where referenced_table_name is not null
-    group by table_schema, table_name, constraint_name
-) fk_part
-inner join
-(
-    select table_schema,
-           table_name,
-           constraint_name,
-           referenced_table_name,
-           group_concat(referenced_column_name order by position_in_unique_constraint) ref_columns
-    from information_schema.key_column_usage
-    where referenced_table_name is not null
-    group by table_schema, table_name, constraint_name
-) ref_part
-on  fk_part.table_schema = ref_part.table_schema
-and fk_part.table_name = ref_part.table_name
-and fk_part.constraint_name = ref_part.constraint_name
-where fk_part.table_schema = '%(db)s'
-and fk_part.table_name = '%(table)s'
-"""
-    q1 = query % { "db" : db1, "table" : table }
-    q2 = query % { "db" : db2, "table" : table }
-
-    fkeys1 = {}
-    cursor.execute(q1)
-    for row in cursor.fetchall():
-        d = dict(zip(['constraint_name', 'expr'],
-                     row))
-        fkeys1[d['constraint_name']] = d['expr']
-
-    fkeys2 = {}
-    cursor.execute(q2)
-    for row in cursor.fetchall():
-        d = dict(zip(['constraint_name', 'expr'],
-                     row))
-        fkeys2[d['constraint_name']] = d['expr']
-
-    k1 = set(fkeys1.keys())
-    k2 = set(fkeys2.keys())
-
-    common = k1 & k2
-    drop = k1 - k2
-    add = k2 - k1
-
-    print common
-    print drop
-    print add
-
-    drop_clauses = []
-    add_clauses = []
-    for d in drop:
-        drop_clauses.append("DROP FOREIGN KEY %(k)s" % {
-                "k" : d })
-
-    for c in common:
-        drop_clauses.append("DROP FOREIGN KEY %(k)s" % {
-                "k" : c })
-        add_clauses.append(fkeys2[c])
-
-    for a in add:
-        add_clauses.append(fkeys2[a])
-
-    clauses = []
-    if len(drop_clauses) > 0:
-        clauses.append(', '.join(drop_clauses))
-
-    if len(add_clauses) > 0:
-        clauses.append(', '.join(add_clauses))
-    print clauses
-    return clauses
-
 def diff_table_columns(cursor, table, db1, db2):
     query = "select column_name from information_schema.columns where table_schema = '%s' and table_name = '%s'"
     q1 = query % (db1, table)
@@ -456,7 +361,6 @@ def diff_table(cursor, table, db1, db2):
 
     clauses += diff_table_columns(cursor, table, db1, db2)
     clauses += diff_table_indexes(cursor, table, db1, db2)
-#    clauses += diff_fks(cursor, table, db1, db2)
 
     dmls = []
     if len(clauses) > 0:
@@ -496,17 +400,29 @@ def diff_databases(cursor, db1, db2):
     db1only = db1tables - db2tables
     db2only = db2tables - db1tables
 
+    dmls = []
     if len(db1only) > 0:
         print "============== %s only ==============" % db1
-        print db1only
+        for dropme in db1only:
+            dmls.append("DROP TABLE %(db)s.%(table)s" % {
+                "db" : db1,
+                "table" : dropme })
 
     if len(db2only) > 0:
         print "============== %s only ==============" % db2
-        print db2only
+        for addme in db2only:
+            dmls.append("CREATE TABLE %(db1)s.%(table)s LIKE %(db2)s.%(table)s" % {
+                "db1" : db1,
+                "db2" : db2,
+                "table" : addme })
 
     common_list = list(common)
     for c in common_list:
-        diff_table(cursor, c, db1, db2)
+        dmls += diff_table(cursor, c, db1, db2)
+
+    for dml in dmls:
+        print dml
+        cursor.execute(dml)
 
 def create_db_from_file(cursor, file):
     fh = open(file, 'r')
