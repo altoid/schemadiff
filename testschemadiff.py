@@ -758,11 +758,12 @@ class TestIndexDiffDML(unittest.TestCase):
         self.assertEqual(control2, dmls[1])
 
     def tearDown(self):
-        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db1 })
-        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db2 })
-
-        self.cursor.close()
-        self.dbconn.close()
+#        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db1 })
+#        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db2 })
+#
+#        self.cursor.close()
+#        self.dbconn.close()
+        pass
 
 
 class TestIndexDiff(unittest.TestCase):
@@ -1382,7 +1383,8 @@ class TestFKDiffDML(unittest.TestCase):
   column1 int not null default 0,
   column2 int not null default 0,
   column3 int not null default 0,
-  column4 int not null default 0
+  column4 int not null default 0,
+  KEY fk (column1, column2)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
 
         t2 = """CREATE TABLE `%(table)s` (
@@ -1642,10 +1644,62 @@ class TestMisc(unittest.TestCase):
             self.cursor, tableName, self.db1, self.db2)
         self.assertEqual(0, len(dmls))
 
+    def test2(self):
+        """
+        change prefix on blob index key
+        """
+
+        tableName = 'mytable'
+        t1 = """CREATE TABLE `%(table)s` (
+  `syncGroupPolicyId` int(11) NOT NULL,
+  `serviceGroupName` text,
+  `databaseName` varchar(20) DEFAULT NULL,
+  `pollSeconds` int(11) DEFAULT NULL,
+  `enabled` char(1) DEFAULT NULL,
+  `sendData` varchar(7) DEFAULT NULL,
+  `trySlowCheck` char(1) DEFAULT NULL,
+  `owner` varchar(32) DEFAULT NULL,
+  `createDate` datetime NOT NULL,
+  `updateDate` datetime NOT NULL,
+  `priority` int(11) DEFAULT '1000',
+  `syncEvenIfIsInSync` char(1) DEFAULT NULL,
+  `noPrivateData` varchar(1) DEFAULT '1',
+  PRIMARY KEY (`syncGroupPolicyId`),
+  UNIQUE KEY `uidx_databaseName_serviceGroupName` (`databaseName`,`serviceGroupName`(255))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
+
+        t2 = """CREATE TABLE `%(table)s` (
+  `syncGroupPolicyId` int(11) NOT NULL,
+  `serviceGroupName` text,
+  `databaseName` varchar(20) DEFAULT NULL,
+  `pollSeconds` int(11) DEFAULT NULL,
+  `enabled` char(1) DEFAULT NULL,
+  `sendData` varchar(7) DEFAULT NULL,
+  `trySlowCheck` char(1) DEFAULT NULL,
+  `owner` varchar(32) DEFAULT NULL,
+  `createDate` datetime NOT NULL,
+  `updateDate` datetime NOT NULL,
+  `priority` int(11) DEFAULT '1000',
+  `syncEvenIfIsInSync` char(1) DEFAULT NULL,
+  `noPrivateData` varchar(1) DEFAULT '1',
+  PRIMARY KEY (`syncGroupPolicyId`),
+  UNIQUE KEY `uidx_databaseName_serviceGroupName` (`databaseName`,`serviceGroupName`(100))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
+
+        create_tables(self.cursor, [t1], self.db1)
+        create_tables(self.cursor, [t2], self.db2)
+        dmls = schemadiff.diff_table(
+            self.cursor, tableName, self.db1, self.db2)
+        (cs1, cs2) = apply_table_change(self.cursor,
+                                        tableName,
+                                        self.db1,
+                                        self.db2)
+
+        self.assertEqual(cs1, cs2)
+
 # drop a PK column and the PK
 # drop a PK column but not the PK
 # same for unique index, FK, and plain index
-# change prefix on blob index key
 
     def tearDown(self):
 #        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db1 })

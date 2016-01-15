@@ -22,6 +22,9 @@
 #
 # TODO:  foreign keys
 #        - change ON UPDATE, ON DELETE
+#
+# TODO:  handle comments - escape chars before reinserting
+#
 
 import MySQLdb
 # docs at http://mysql-python.sourceforge.net/MySQLdb.html
@@ -109,108 +112,95 @@ def dbdump(dbname):
 def dbchecksum(dbname):
     return shacmd(normalize(dbdump(dbname)))
 
-def diff_table_indexes(cursor, table, db1, db2):
+def diff_fks(cursor, table, db1, db2):
     query = """
 select
-        key_name,
-        constraint_type,
-	concat (
-	       'ADD ',
-	       case constraint_type
-	       when 'PRIMARY KEY' then concat(constraint_type, '(', key_columns, ')')
-	       when 'FOREIGN KEY' then concat('CONSTRAINT ', key_name, ' ', constraint_type, ' ', '(', key_columns, ') REFERENCES ',
-                                              referenced_table_name, '(', ref_columns, ')')
-	       when 'UNIQUE' then concat('UNIQUE KEY ', key_name, '(', key_columns, ')')
-	       else concat('KEY ', key_name, '(', key_columns, ')')
-	       end
-	) expr
+	local_part.constraint_name,
+concat (
+'ADD CONSTRAINT ',
+local_part.constraint_name,
+' FOREIGN KEY (',
+local_part.columns,
+') REFERENCES ',
+ref_part.referenced_table_name,
+'(',
+ref_part.referenced_columns,
+')'
+) expr
 from
 (
     select
-        fk_part.table_schema,
-        fk_part.table_name,
-        fk_part.constraint_name as key_name,
-        fk_part.fk_columns as key_columns,
-        ref_part.referenced_table_name,
-        ref_part.ref_columns,
-        c.constraint_type
-    from
-    (
-        select table_schema,
-               table_name,
-               constraint_name,
-               group_concat(column_name order by ordinal_position) fk_columns
-        from information_schema.key_column_usage
-        group by table_schema, table_name, constraint_name
-    ) fk_part
-    inner join
-    (
-        select table_schema,
-               table_name,
-               constraint_name,
-               referenced_table_name,
-               group_concat(referenced_column_name order by position_in_unique_constraint) ref_columns
-        from information_schema.key_column_usage
-        group by table_schema, table_name, constraint_name
-    ) ref_part
-    on  fk_part.table_schema = ref_part.table_schema
-    and fk_part.table_name = ref_part.table_name
-    and fk_part.constraint_name = ref_part.constraint_name
     
-    inner join information_schema.table_constraints c
-    on c.table_schema = fk_part.table_schema
-    and c.table_name = fk_part.table_name
-    and c.constraint_name = fk_part.constraint_name
+    -- table_constraints
+    c.TABLE_SCHEMA       ,
+    c.TABLE_NAME         ,
+    c.CONSTRAINT_NAME    ,
     
-    where fk_part.table_schema = '%(db)s'
-    and fk_part.table_name = '%(table)s'
-    union
+    -- key_column_usage
+    group_concat(k.column_name order by k.ordinal_position) columns
     
-    -- this part pulls data on indexes without constraints
+    from information_schema.table_constraints c
+    inner join information_schema.key_column_usage k
+    on
+    c.constraint_name = k.constraint_name and
+    c.table_schema = k.table_schema and
+    c.table_name = k.table_name
     
+    where 
+    c.constraint_type = 'FOREIGN KEY'
+    
+    group by c.table_schema, c.table_name, c.constraint_name
+) local_part
+inner join
+(
     select
-    	s.table_schema,
-    	s.table_name,
-    	s.index_name as key_name,
-    	group_concat(column_name order by seq_in_index) key_columns,
-    	NULL as	referenced_table_name,
-    	NULL as ref_columns,
-    	c.constraint_type
-    from information_schema.statistics s
     
-    left join information_schema.table_constraints c
-    on s.index_name = c.constraint_name
-    and s.table_schema = c.table_schema
-    and s.table_name = c.table_name
+    -- table_constraints
+    c.TABLE_SCHEMA       ,
+    c.TABLE_NAME         ,
+    c.CONSTRAINT_NAME    ,
     
-    where s.table_schema = '%(db)s'
-    and s.table_name = '%(table)s'
-    and c.constraint_type is null
-    group by s.table_schema, s.table_name, s.index_name
-) a
+    k.REFERENCED_TABLE_NAME         ,
+    group_concat(k.referenced_column_name order by k.ordinal_position) referenced_columns
+    
+    from information_schema.table_constraints c
+    inner join information_schema.key_column_usage k
+    on
+    c.constraint_name = k.constraint_name and
+    c.table_schema = k.table_schema and
+    c.table_name = k.table_name
+    
+    where 
+    c.constraint_type = 'FOREIGN KEY'
+    
+    group by c.table_schema, c.table_name, c.constraint_name
+) ref_part
+
+on  local_part.table_schema = ref_part.table_schema
+and local_part.table_name = ref_part.table_name
+and local_part.constraint_name = ref_part.constraint_name
+
+where local_part.table_schema = '%(db)s'
+and local_part.table_name = '%(table)s'
+;
 """
-    q1 = query % {
-        "db" : db1,
-        "table" : table }
+    q1 = query % { "db" : db1, "table" : table }
+    q2 = query % { "db" : db2, "table" : table }
 
-    q2 = query % {
-        "db" : db2,
-        "table" : table }
-
-    select_columns = ['key_name', 'constraint_type', 'expr']
+    select_columns = ['constraint_name', 'expr']
     indexdefs1 = {}
     cursor.execute(q1)
     for row in cursor.fetchall():
         d = dict(zip(select_columns,
                      row))
-        indexdefs1[d['key_name']] = d
+        indexdefs1[d['constraint_name']] = d
 
     indexdefs2 = {}
     cursor.execute(q2)
     for row in cursor.fetchall():
         d = dict(zip(select_columns,
                      row))
-        indexdefs2[d['key_name']] = d
+        indexdefs2[d['constraint_name']] = d
 
     indexes_1 = set(indexdefs1.keys())
     indexes_2 = set(indexdefs2.keys())
@@ -219,48 +209,247 @@ from
     drop = indexes_1 - indexes_2
     common = indexes_1 & indexes_2
 
-    # print add
-    # print drop
-    # print common
+    drop_clauses = []
+    add_clauses = []
 
-    for c in common:
-        # print indexdefs1[c]
-        # print indexdefs2[c]
-        pass
+    for k in drop:
+        drop_clauses.append("DROP FOREIGN KEY %s" % k)
+
+    for k in add:
+        add_clauses.append(indexdefs2[k]['expr'])
+
+    for k in common:
+        if indexdefs1[k]['expr'] != indexdefs2[k]['expr']:
+            drop_clauses.append("DROP FOREIGN KEY %s" % k)
+            add_clauses.append(indexdefs2[k]['expr'])
+
+    return drop_clauses, add_clauses
+
+def diff_plain_indexes(cursor, table, db1, db2):
+    query = """
+select
+    s.index_name,
+concat (
+'ADD KEY ',
+s.index_name,
+'(',
+group_concat(s.column_name, if(s.sub_part, concat('(', s.sub_part, ')'), '') order by s.seq_in_index),
+')'
+) expr
+from
+     information_schema.statistics s
+left join
+(
+    select distinct
+    s.table_catalog,
+    s.table_schema,
+    s.table_name,
+    s.index_name,
+    1
+    
+    from information_schema.statistics s
+    
+    inner join information_schema.key_column_usage k
+    on s.table_catalog = k.table_catalog
+    and s.table_schema = k.table_schema
+    and s.table_name = k.table_name
+    and s.index_name = k.constraint_name
+    
+    left join information_schema.table_constraints c
+    on k.table_schema = c.table_schema
+    and k.table_name = c.table_name
+    and k.constraint_name = c.constraint_name
+    
+    where 
+        s.table_schema = '%(db)s' and
+        s.table_name = '%(table)s' and
+        c.constraint_type <> 'foreign key'
+
+) t
+on
+t.table_catalog = s.table_catalog and
+t.table_schema = s.table_schema and
+t.table_name = s.table_name and
+t.index_name = s.index_name
+
+where t.table_catalog is null and
+s.table_schema = '%(db)s' and
+s.table_name = '%(table)s'
+
+group by s.table_catalog, s.table_schema, s.table_name, s.index_name
+"""
+    q1 = query % { "db" : db1, "table" : table }
+    q2 = query % { "db" : db2, "table" : table }
+
+#    print q1, ';'
+#    print q2, ';'
+
+    select_columns = ['index_name', 'expr']
+    indexdefs1 = {}
+    cursor.execute(q1)
+    for row in cursor.fetchall():
+        d = dict(zip(select_columns,
+                     row))
+        indexdefs1[d['index_name']] = d
+
+    indexdefs2 = {}
+    cursor.execute(q2)
+    for row in cursor.fetchall():
+        d = dict(zip(select_columns,
+                     row))
+        indexdefs2[d['index_name']] = d
+
+    indexes_1 = set(indexdefs1.keys())
+    indexes_2 = set(indexdefs2.keys())
+
+    add = indexes_2 - indexes_1
+    drop = indexes_1 - indexes_2
+    common = indexes_1 & indexes_2
+
+#    print drop
+#    print add
+#    print common
 
     drop_clauses = []
     add_clauses = []
-    for d in drop:
-        if indexdefs1[d]['constraint_type'] == 'PRIMARY KEY':
+
+    for k in drop:
+        drop_clauses.append("DROP INDEX %s" % k)
+
+    for k in add:
+        add_clauses.append(indexdefs2[k]['expr'])
+
+    for k in common:
+        if indexdefs1[k]['expr'] != indexdefs2[k]['expr']:
+            drop_clauses.append("DROP INDEX %s" % k)
+            add_clauses.append(indexdefs2[k]['expr'])
+
+    return drop_clauses, add_clauses
+
+def diff_constrained_indexes(cursor, table, db1, db2):
+    # UNIQUE or PRIMARY KEY indexes
+    query = """
+
+select
+    index_name,
+    constraint_type,
+concat (
+'ADD ',
+case constraint_type
+when 'PRIMARY KEY' then constraint_type
+when 'UNIQUE'      then concat('UNIQUE KEY ', index_name)
+end,
+'(',
+group_concat(column_name, if(sub_part, concat('(', sub_part, ')'), '') order by seq_in_index),
+')'
+) expr
+from
+(
+    select distinct
+           s.table_catalog,
+           s.table_schema,
+           s.table_name,
+           s.index_name,
+           s.column_name, 
+           s.seq_in_index,
+           s.sub_part,
+           c.constraint_type
+    
+    from information_schema.statistics s
+    
+    inner join information_schema.key_column_usage k
+    on s.table_catalog = k.table_catalog
+    and s.table_schema = k.table_schema
+    and s.table_name = k.table_name
+    and s.index_name = k.constraint_name
+    
+    left join information_schema.table_constraints c
+    on k.table_schema = c.table_schema
+    and k.table_name = c.table_name
+    and k.constraint_name = c.constraint_name
+    
+    where 
+        s.table_schema = '%(db)s' and
+        s.table_name = '%(table)s' and
+        c.constraint_type <> 'foreign key'  -- constraint_type is never null
+) t
+group by
+	table_catalog,
+	table_schema,
+	table_name,
+	index_name,
+	constraint_type
+"""
+
+    q1 = query % { "db" : db1, "table" : table }
+    q2 = query % { "db" : db2, "table" : table }
+
+    select_columns = ['index_name', 'constraint_type', 'expr']
+    indexdefs1 = {}
+    cursor.execute(q1)
+    for row in cursor.fetchall():
+        d = dict(zip(select_columns,
+                     row))
+        indexdefs1[d['index_name']] = d
+
+    indexdefs2 = {}
+    cursor.execute(q2)
+    for row in cursor.fetchall():
+        d = dict(zip(select_columns,
+                     row))
+        indexdefs2[d['index_name']] = d
+
+    indexes_1 = set(indexdefs1.keys())
+    indexes_2 = set(indexdefs2.keys())
+
+    add = indexes_2 - indexes_1
+    drop = indexes_1 - indexes_2
+    common = indexes_1 & indexes_2
+
+    drop_clauses = []
+    add_clauses = []
+
+    for k in drop:
+        if indexdefs1[k]['constraint_type'] == 'PRIMARY KEY':
             drop_clauses.append("DROP PRIMARY KEY")
-        elif indexdefs1[d]['constraint_type'] == 'FOREIGN KEY':
-            drop_clauses.append("DROP FOREIGN KEY %s" % d)
         else:
-            drop_clauses.append("DROP INDEX %s" % d)
+            drop_clauses.append("DROP INDEX %s" % k)
 
-    for a in add:
-        add_clauses.append(indexdefs2[a]['expr'])
+    for k in add:
+        add_clauses.append(indexdefs2[k]['expr'])
 
-    for c in common:
-        # drop then add
-        if indexdefs1[c]['constraint_type'] == 'PRIMARY KEY':
-            if indexdefs1[c]['expr'] != indexdefs2[c]['expr']:
+    for k in common:
+        if indexdefs1[k]['expr'] != indexdefs2[k]['expr']:
+            if indexdefs1[k]['constraint_type'] == 'PRIMARY KEY':
                 drop_clauses.append("DROP PRIMARY KEY")
-                add_clauses.append(indexdefs2[c]['expr'])
-        elif indexdefs1[c]['constraint_type'] == 'FOREIGN KEY':
-            if indexdefs2[c]['constraint_type'] == 'FOREIGN KEY':
-                if indexdefs1[c]['expr'] != indexdefs2[c]['expr']:
-                    drop_clauses.append("DROP FOREIGN KEY %s" % c)
-                    add_clauses.append(indexdefs2[c]['expr'])
             else:
-                drop_clauses.append("DROP FOREIGN KEY %s" % c)
-        else:
-            if indexdefs1[c]['expr'] != indexdefs2[c]['expr']:
-                drop_clauses.append("DROP INDEX %s" % c)
-                add_clauses.append(indexdefs2[c]['expr'])
+                drop_clauses.append("DROP INDEX %s" % k)
+            add_clauses.append(indexdefs2[k]['expr'])
 
-    # print drop_clauses
-    # print add_clauses
+    return drop_clauses, add_clauses
+
+def diff_table_indexes(cursor, table, db1, db2):
+    drop_clauses = []
+    add_clauses = []
+
+    (drop, add) = diff_plain_indexes(cursor, table, db1, db2)
+    # print "plain drop:", drop
+    # print "plain add:", add
+
+    drop_clauses += drop
+    add_clauses += add
+
+    (drop, add) = diff_constrained_indexes(cursor, table, db1, db2)
+    # print "constrained drop:", drop
+    # print "constrained add:", add
+    drop_clauses += drop
+    add_clauses += add
+
+    (drop, add) = diff_fks(cursor, table, db1, db2)
+    # print "fk drop:", drop
+    # print "fk add:", add
+    drop_clauses += drop
+    add_clauses += add
 
     return drop_clauses, add_clauses
 
