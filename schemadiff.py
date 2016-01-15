@@ -247,22 +247,7 @@ from
             drop_clauses.append("DROP INDEX %s" % c)
             add_clauses.append(indexdefs2[c]['expr'])
 
-    # HACK: if we drop a foreign key, and then add an index with the
-    # same name as the FK, don't do the add.  assume that the original
-    # table had a FK and an index with the same name.  in that case
-    # assume that the FK is a constraint on the existing index and
-    # just remove the constraint.  fix this when i figure out how to
-    # make the above query return two rows when we have index/FK with
-    # same name.
-
-    clauses = []
-    if len(drop_clauses) > 0:
-        clauses.append(', '.join(drop_clauses))
-
-    if len(add_clauses) > 0:
-        clauses.append(', '.join(add_clauses))
-
-    return clauses
+    return drop_clauses, add_clauses
 
 def diff_table_columns(cursor, table, db1, db2):
     query = "select column_name from information_schema.columns where table_schema = '%s' and table_name = '%s'"
@@ -309,10 +294,12 @@ if(column_comment = '', '', concat(' COMMENT ''', column_comment, ''''))
  and column_name in (%(columns)s)
 """
 
-    clauses = []
+    drop_clauses = []
+    add_clauses = []
+    modify_clauses = []
 
     for d in columns_to_drop:
-        clauses.append("DROP COLUMN %s" % d)
+        drop_clauses.append("DROP COLUMN %s" % d)
 
     if len(columns_to_add) > 0:
         column_list = "'" + "','".join(columns_to_add) + "'"
@@ -324,7 +311,7 @@ if(column_comment = '', '', concat(' COMMENT ''', column_comment, ''''))
         for row in cursor.fetchall():
             d = dict(zip(['column_name', 'column_def'],
                          row))
-            clauses.append("ADD COLUMN %s" % d['column_def'])
+            add_clauses.append("ADD COLUMN %s" % d['column_def'])
             
     if len(common) > 0:
         column_list = "'" + "','".join(common) + "'"
@@ -348,30 +335,32 @@ if(column_comment = '', '', concat(' COMMENT ''', column_comment, ''''))
 
         for c in common:
             if d1[c] != d2[c]:
-                clauses.append("MODIFY COLUMN %s" % d2[c])
+                modify_clauses.append("MODIFY COLUMN %s" % d2[c])
 
-    column_clauses = []
-    if len(clauses) > 0:
-        column_clauses.append(', '.join(clauses))
-
-    return column_clauses
+    return drop_clauses, add_clauses, modify_clauses
 
 def diff_table(cursor, table, db1, db2):
-    clauses = []
-
-    clauses += diff_table_columns(cursor, table, db1, db2)
-    clauses += diff_table_indexes(cursor, table, db1, db2)
+    (column_drop, column_add, column_modify) = diff_table_columns(cursor, table, db1, db2)
+    (index_drop, index_add) = diff_table_indexes(cursor, table, db1, db2)
 
     dmls = []
-    if len(clauses) > 0:
-        for c in clauses:
-            dml = "ALTER TABLE %(db)s.%(table)s %(therest)s" % {
-                "db" : db1,
-                "table" : table,
-                "therest" : c
-                }
+    if len(column_drop + index_drop) > 0:
+        drop_clauses = ', '.join(column_drop + index_drop)
+        dml = "ALTER TABLE %(db)s.%(table)s %(therest)s" % {
+            "db" : db1,
+            "table" : table,
+            "therest" : drop_clauses
+            }    
+        dmls.append(dml)
 
-            dmls.append(dml)
+    if len(column_add + index_add + column_modify) > 0:
+        other_clauses = ', '.join(column_add + index_add + column_modify)
+        dml = "ALTER TABLE %(db)s.%(table)s %(therest)s" % {
+            "db" : db1,
+            "table" : table,
+            "therest" : other_clauses
+            }
+        dmls.append(dml)
 
     return dmls
             
