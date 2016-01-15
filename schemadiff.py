@@ -24,7 +24,6 @@
 #        - change ON UPDATE, ON DELETE
 #
 # TODO:  handle comments - escape chars before reinserting
-#
 
 import MySQLdb
 # docs at http://mysql-python.sourceforge.net/MySQLdb.html
@@ -489,6 +488,10 @@ concat(
     when column_default = '' then ''
     when column_type like '%%char%%' then concat(' DEFAULT ''', column_default, '''')
     when column_type like '%%text' then concat(' DEFAULT ''', column_default, '''')
+    when column_type = 'timestamp' and column_default <> 'current_timestamp' then concat(' DEFAULT ''', column_default, '''')
+    when column_type = 'datetime' and column_default <> 'current_timestamp' then concat(' DEFAULT ''', column_default, '''')
+    when column_type = 'date' and column_default <> 'current_timestamp' then concat(' DEFAULT ''', column_default, '''')
+    when column_type = 'time' and column_default <> 'current_timestamp' then concat(' DEFAULT ''', column_default, '''')
     else concat(' DEFAULT ', column_default)
     end,
     if(extra = '', '', concat(' ', extra)),
@@ -579,22 +582,27 @@ def diff_databases(cursor, db1, db2):
     db1tables = set()
     db2tables = set()
 
+    print "getting tables for %s" % db1
     cursor.execute(q1)
     for row in cursor.fetchall():
         d = dict(zip(['table_name'],
                      row))
         db1tables.add(d['table_name'])
 
+    print "getting tables for %s" % db2
     cursor.execute(q2)
     for row in cursor.fetchall():
         d = dict(zip(['table_name'],
                      row))
         db2tables.add(d['table_name'])
 
+    print "done with all that"
+
     common = db1tables & db2tables
     db1only = db1tables - db2tables
     db2only = db2tables - db1tables
 
+    print "dropping obsolete tables"
     dmls = []
     if len(db1only) > 0:
         for dropme in db1only:
@@ -602,12 +610,15 @@ def diff_databases(cursor, db1, db2):
                 "db" : db1,
                 "table" : dropme })
 
+    print "adding new tables"
     if len(db2only) > 0:
         for addme in db2only:
             dmls.append("CREATE TABLE %(db1)s.%(table)s LIKE %(db2)s.%(table)s" % {
                 "db1" : db1,
                 "db2" : db2,
                 "table" : addme })
+
+    print "dealing with columns and indexes"
 
     common_list = list(common)
     for c in common_list:

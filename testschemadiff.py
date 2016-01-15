@@ -1706,13 +1706,51 @@ class TestMisc(unittest.TestCase):
         t1 = """CREATE TABLE `%(table)s` (
   column1 int not null,
   column2 varchar(11) not null,
-  column3 timestamp not null
+  column3 timestamp not null,
+  column4 timestamp not null
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
 
         t2 = """CREATE TABLE `%(table)s` (
   column1 int not null default 123,
   column2 varchar(11) not null default 'whee',
-  column3 timestamp not null default CURRENT_TIMESTAMP
+  column3 timestamp not null default CURRENT_TIMESTAMP,
+  column4 timestamp not null default '0000-00-00 00:00:00'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
+
+        create_tables(self.cursor, [t1], self.db1)
+        create_tables(self.cursor, [t2], self.db2)
+
+        dmls = schemadiff.diff_table(
+            self.cursor, tableName, self.db1, self.db2)
+        (cs1, cs2) = apply_table_change(self.cursor,
+                                        tableName,
+                                        self.db1,
+                                        self.db2)
+
+        self.assertEqual(cs1, cs2)
+
+    def testDateTimeDefaults(self):
+        """
+        default values for temporal types
+        """
+        tableName = 'mytable'
+
+        t1 = """CREATE TABLE `%(table)s` (
+  column1 datetime,
+  column2 datetime,
+  column3 timestamp not null,
+  column4 timestamp not null,
+  c5 date,
+  c6 time
+) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
+
+        t2 = """CREATE TABLE `%(table)s` (
+  column1 datetime default CURRENT_TIMESTAMP,
+  column2 datetime default '0000-00-00 00:00:00',
+  column3 timestamp not null default CURRENT_TIMESTAMP,
+  column4 timestamp not null default '0000-00-00 00:00:00',
+  c5 date default '2000-01-01',
+  c6 time default '12:34:56'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
 
         create_tables(self.cursor, [t1], self.db1)
