@@ -217,7 +217,16 @@ from
 
     add = indexes_2 - indexes_1
     drop = indexes_1 - indexes_2
-    change = indexes_1 & indexes_2
+    common = indexes_1 & indexes_2
+
+    # print add
+    # print drop
+    # print common
+
+    for c in common:
+        # print indexdefs1[c]
+        # print indexdefs2[c]
+        pass
 
     drop_clauses = []
     add_clauses = []
@@ -232,20 +241,26 @@ from
     for a in add:
         add_clauses.append(indexdefs2[a]['expr'])
 
-    for c in change:
+    for c in common:
         # drop then add
         if indexdefs1[c]['constraint_type'] == 'PRIMARY KEY':
-            drop_clauses.append("DROP PRIMARY KEY")
-            add_clauses.append(indexdefs2[c]['expr'])
-        elif indexdefs1[c]['constraint_type'] == 'FOREIGN KEY':
-            drop_clauses.append("DROP FOREIGN KEY %s" % c)
-
-            # only add if the new index is also a FK
-            if indexdefs2[c]['constraint_type'] == 'FOREIGN KEY':
+            if indexdefs1[c]['expr'] != indexdefs2[c]['expr']:
+                drop_clauses.append("DROP PRIMARY KEY")
                 add_clauses.append(indexdefs2[c]['expr'])
+        elif indexdefs1[c]['constraint_type'] == 'FOREIGN KEY':
+            if indexdefs2[c]['constraint_type'] == 'FOREIGN KEY':
+                if indexdefs1[c]['expr'] != indexdefs2[c]['expr']:
+                    drop_clauses.append("DROP FOREIGN KEY %s" % c)
+                    add_clauses.append(indexdefs2[c]['expr'])
+            else:
+                drop_clauses.append("DROP FOREIGN KEY %s" % c)
         else:
-            drop_clauses.append("DROP INDEX %s" % c)
-            add_clauses.append(indexdefs2[c]['expr'])
+            if indexdefs1[c]['expr'] != indexdefs2[c]['expr']:
+                drop_clauses.append("DROP INDEX %s" % c)
+                add_clauses.append(indexdefs2[c]['expr'])
+
+    # print drop_clauses
+    # print add_clauses
 
     return drop_clauses, add_clauses
 
@@ -391,14 +406,12 @@ def diff_databases(cursor, db1, db2):
 
     dmls = []
     if len(db1only) > 0:
-        print "============== %s only ==============" % db1
         for dropme in db1only:
             dmls.append("DROP TABLE %(db)s.%(table)s" % {
                 "db" : db1,
                 "table" : dropme })
 
     if len(db2only) > 0:
-        print "============== %s only ==============" % db2
         for addme in db2only:
             dmls.append("CREATE TABLE %(db1)s.%(table)s LIKE %(db2)s.%(table)s" % {
                 "db1" : db1,

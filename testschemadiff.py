@@ -359,16 +359,22 @@ class TestColumnDiffDML(unittest.TestCase):
 
         dmls = schemadiff.diff_table(
             self.cursor, tableName, self.db1, self.db2)
-        self.assertEqual(1, len(dmls))
+        self.assertEqual(2, len(dmls))
 
         control = ("ALTER TABLE %(db)s.%(table)s "
-                   "DROP COLUMN objectId, "
+                   "DROP COLUMN objectId") % {
+            "db" : self.db1,
+            "table" : tableName
+            }
+        self.assertEqual(control, dmls[0])
+
+        control = ("ALTER TABLE %(db)s.%(table)s "
                    "ADD COLUMN objectNamespaceAndId bigint(20) NOT NULL, "
                    "MODIFY COLUMN objectType smallint(6) unsigned NOT NULL") % {
             "db" : self.db1,
             "table" : tableName
             }
-        self.assertEqual(control, dmls[0])
+        self.assertEqual(control, dmls[1])
 
     def tearDown(self):
         self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db1 })
@@ -1230,6 +1236,36 @@ class TestFKDiffDML(unittest.TestCase):
         self.cursor.execute("create database %(db)s" % { "db" : self.db1 })
         self.cursor.execute("create database %(db)s" % { "db" : self.db2 })
 
+    def testNoDiff(self):
+        """
+        auto-diff a table with a FK and make sure nothing happens.
+        """
+        tableName = 'mytable'
+
+        ref = """CREATE TABLE `reftable` (
+  column1 int not null default 0,
+  column2 int not null default 0,
+  column3 int not null default 0,
+  column4 int not null default 0,
+  PRIMARY KEY(column1, column2)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8"""
+
+        t1 = """CREATE TABLE `%(table)s` (
+  column1 int not null default 0,
+  column2 int not null default 0,
+  column3 int not null default 0,
+  column4 int not null default 0,
+  KEY fk (column1, column2),
+  CONSTRAINT `fk` foreign key(column1, column2) REFERENCES reftable(column1, column2)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
+
+        create_tables(self.cursor, [ref, t1], self.db1)
+        create_tables(self.cursor, [ref, t1], self.db2)
+
+        dmls = schemadiff.diff_table(
+            self.cursor, tableName, self.db1, self.db2)
+        self.assertEqual(0, len(dmls))
+
     def testChangeFK(self):
         """
         change the columns in a foreign key.
@@ -1513,6 +1549,103 @@ class TestFKDiff(unittest.TestCase):
                                         self.db2)
 
         self.assertEqual(cs1, cs2)
+
+    def tearDown(self):
+#        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db1 })
+#        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db2 })
+#
+#        self.cursor.close()
+#        self.dbconn.close()
+        pass
+
+
+class TestMisc(unittest.TestCase):
+    db1 = 'schemadiff_misc_old'
+    db2 = 'schemadiff_misc_new'
+    dbconn = None
+    cursor = None
+
+    def setUp(self):
+        self.dbconn = dsn.getConnection()
+        self.cursor = self.dbconn.cursor()
+
+        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db1 })
+        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db2 })
+        self.cursor.execute("create database %(db)s" % { "db" : self.db1 })
+        self.cursor.execute("create database %(db)s" % { "db" : self.db2 })
+    
+    def test1(self):
+        tableName = 'mytable'
+
+        t1 = """CREATE TABLE `%(table)s` (
+  `adBrandId` int(11) NOT NULL DEFAULT '0',
+  `title` varchar(128) NOT NULL DEFAULT '',
+  `description` text NOT NULL,
+  `imageUrl` varchar(255) DEFAULT NULL,
+  `isActive` char(1) NOT NULL DEFAULT '1',
+  `createDate` datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
+  `updateDate` datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
+  PRIMARY KEY (`adBrandId`),
+  KEY `idxTitle_AdBrand` (`title`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
+
+        t2 = """CREATE TABLE `%(table)s` (
+  `adBrandId` int(11) NOT NULL DEFAULT '0',
+  `title` varchar(128) NOT NULL DEFAULT '',
+  `description` text NOT NULL,
+  `imageUrl` varchar(255) DEFAULT NULL,
+  `isActive` char(1) NOT NULL DEFAULT '1',
+  `createDate` datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
+  `updateDate` datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
+  PRIMARY KEY (`adBrandId`),
+  KEY `idxTitle_AdBrand` (`title`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
+
+        create_tables(self.cursor, [t1], self.db1)
+        create_tables(self.cursor, [t2], self.db2)
+        dmls = schemadiff.diff_table(
+            self.cursor, tableName, self.db1, self.db2)
+
+        (cs1, cs2) = apply_table_change(self.cursor,
+                                        tableName,
+                                        self.db1,
+                                        self.db2)
+
+        self.assertEqual(cs1, cs2)
+
+    def test2(self):
+        """
+        self-diff a table with a blob key that has a prefix.
+        """
+        tableName = 'mytable'
+        t1 = """CREATE TABLE `%(table)s` (
+  `syncGroupPolicyId` int(11) NOT NULL,
+  `serviceGroupName` text,
+  `databaseName` varchar(20) DEFAULT NULL,
+  `pollSeconds` int(11) DEFAULT NULL,
+  `enabled` char(1) DEFAULT NULL,
+  `sendData` varchar(7) DEFAULT NULL,
+  `trySlowCheck` char(1) DEFAULT NULL,
+  `owner` varchar(32) DEFAULT NULL,
+  `createDate` datetime NOT NULL,
+  `updateDate` datetime NOT NULL,
+  `priority` int(11) DEFAULT '1000',
+  `syncEvenIfIsInSync` char(1) DEFAULT NULL,
+  `noPrivateData` varchar(1) DEFAULT '1',
+  PRIMARY KEY (`syncGroupPolicyId`),
+  UNIQUE KEY `uidx_databaseName_serviceGroupName` (`databaseName`,`serviceGroupName`(255))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
+
+        create_tables(self.cursor, [t1], self.db1)
+        create_tables(self.cursor, [t1], self.db2)
+        dmls = schemadiff.diff_table(
+            self.cursor, tableName, self.db1, self.db2)
+        self.assertEqual(0, len(dmls))
+
+# drop a PK column and the PK
+# drop a PK column but not the PK
+# same for unique index, FK, and plain index
+# change prefix on blob index key
 
     def tearDown(self):
 #        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db1 })
