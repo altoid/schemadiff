@@ -1697,6 +1697,36 @@ class TestMisc(unittest.TestCase):
 
         self.assertEqual(cs1, cs2)
 
+    def testDefaults(self):
+        """
+        set default values of various types
+        """
+        tableName = 'mytable'
+
+        t1 = """CREATE TABLE `%(table)s` (
+  column1 int not null,
+  column2 varchar(11) not null,
+  column3 timestamp not null
+) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
+
+        t2 = """CREATE TABLE `%(table)s` (
+  column1 int not null default 123,
+  column2 varchar(11) not null default 'whee',
+  column3 timestamp not null default CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
+
+        create_tables(self.cursor, [t1], self.db1)
+        create_tables(self.cursor, [t2], self.db2)
+
+        dmls = schemadiff.diff_table(
+            self.cursor, tableName, self.db1, self.db2)
+        (cs1, cs2) = apply_table_change(self.cursor,
+                                        tableName,
+                                        self.db1,
+                                        self.db2)
+
+        self.assertEqual(cs1, cs2)
+
 # drop a PK column and the PK
 # drop a PK column but not the PK
 # same for unique index, FK, and plain index

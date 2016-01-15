@@ -480,17 +480,19 @@ def diff_table_columns(cursor, table, db1, db2):
 select
 column_name,
 concat(
-column_name,
-' ',
-column_type,
-if(is_nullable = 'NO', ' NOT NULL', ''),
-case
-when column_default is null then ''
-when column_default = '' then ''
-else concat(' DEFAULT ', column_default)
-end,
-if(extra = '', '', concat(' ', extra)),
-if(column_comment = '', '', concat(' COMMENT ''', column_comment, ''''))
+    column_name,
+    ' ',
+    column_type,
+    if(is_nullable = 'NO', ' NOT NULL', ''),
+    case
+    when column_default is null then ''
+    when column_default = '' then ''
+    when column_type like '%%char%%' then concat(' DEFAULT ''', column_default, '''')
+    when column_type like '%%text' then concat(' DEFAULT ''', column_default, '''')
+    else concat(' DEFAULT ', column_default)
+    end,
+    if(extra = '', '', concat(' ', extra)),
+    if(column_comment = '', '', concat(' COMMENT ''', column_comment, ''''))
 ) column_def
  from information_schema.columns
  where table_schema = '%(db)s'
