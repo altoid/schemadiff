@@ -495,7 +495,9 @@ concat(
     else concat(' DEFAULT ', column_default)
     end,
     if(extra = '', '', concat(' ', extra)),
-    if(column_comment = '', '', concat(' COMMENT ''', column_comment, ''''))
+    if(column_comment = '', '', concat(' COMMENT ''',
+                                       replace(column_comment, '''', ''''''),
+                                       ''''))
 ) column_def
  from information_schema.columns
  where table_schema = '%(db)s'
@@ -627,6 +629,10 @@ def diff_databases(cursor, db1, db2):
     for dml in dmls:
         print dml
         cursor.execute(dml)
+
+    print "aftermath:"
+    print "%s checksum:  %s" % (db1, dbchecksum(db1))
+    print "%s checksum:  %s" % (db2, dbchecksum(db2))
 
 def create_db_from_file(cursor, file):
     fh = open(file, 'r')

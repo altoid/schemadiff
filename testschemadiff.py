@@ -1848,6 +1848,33 @@ class TestMisc(unittest.TestCase):
 
         self.assertEqual(cs1, cs2)
 
+    def testComment(self):
+        """
+        handle comments that have '' in them
+        """
+        tableName = 'mytable'
+
+        t1 = """CREATE TABLE `%(table)s` (
+  column1 int not null
+) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
+
+        t2 = """CREATE TABLE `%(table)s` (
+  column1 int not null default 123 COMMENT 'i don''t like this comment'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
+
+        create_tables(self.cursor, [t1], self.db1)
+        create_tables(self.cursor, [t2], self.db2)
+
+        dmls = schemadiff.diff_table(
+            self.cursor, tableName, self.db1, self.db2)
+        print dmls
+        (cs1, cs2) = apply_table_change(self.cursor,
+                                        tableName,
+                                        self.db1,
+                                        self.db2)
+
+        self.assertEqual(cs1, cs2)
+
     def testDefaults(self):
         """
         set default values of various types
