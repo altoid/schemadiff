@@ -2,8 +2,6 @@
 
 # TODO:  handle auto_increment columns
 #
-# TODO:  timestamp columns with specifiers
-#
 # TODO:  check if the following is the same for the common tables:
 # tables.engine
 # tables.table_collation
@@ -14,9 +12,6 @@
 #
 # db1 = "%s_%s" % (file1, hash1.hexdigest())
 # db2 = "%s_%s" % (file2, hash2.hexdigest())
-#
-# TODO:  if we drop an indexed column, we don't need to drop the
-#        associated index.    
 #
 # TODO:  handle fulltext indexes
 #
@@ -305,10 +300,6 @@ group by s.table_catalog, s.table_schema, s.table_name, s.index_name
     drop = indexes_1 - indexes_2
     common = indexes_1 & indexes_2
 
-#    print drop
-#    print add
-#    print common
-
     drop_clauses = []
     add_clauses = []
 
@@ -549,31 +540,41 @@ concat(
 
     return drop_clauses, add_clauses, modify_clauses
 
-def diff_table(cursor, table, db1, db2):
+def _format_dmls(table, db1, db2, clauses, prettyprint):
+
+    dmls = []
+    
+    if len(clauses) > 0:
+        if (prettyprint):
+            clauses_str = ',\n\t'.join(clauses)
+            dml = "ALTER TABLE %(db)s.%(table)s\n\t%(therest)s\n\t;" % {
+                "db" : db1,
+                "table" : table,
+                "therest" : clauses_str
+                }    
+        else:
+            clauses_str = ', '.join(clauses)
+            dml = "ALTER TABLE %(db)s.%(table)s %(therest)s;" % {
+                "db" : db1,
+                "table" : table,
+                "therest" : clauses_str
+                }    
+
+        dmls.append(dml)
+
+    return dmls
+
+def diff_table(cursor, table, db1, db2, prettyprint=False):
     (column_drop, column_add, column_modify) = diff_table_columns(cursor, table, db1, db2)
     (index_drop, index_add) = diff_table_indexes(cursor, table, db1, db2)
 
     dmls = []
-    if len(column_drop + index_drop) > 0:
-        drop_clauses = ', '.join(column_drop + index_drop)
-        dml = "ALTER TABLE %(db)s.%(table)s %(therest)s" % {
-            "db" : db1,
-            "table" : table,
-            "therest" : drop_clauses
-            }    
-        dmls.append(dml)
-
-    if len(column_add + index_add + column_modify) > 0:
-        other_clauses = ', '.join(column_add + index_add + column_modify)
-        dml = "ALTER TABLE %(db)s.%(table)s %(therest)s" % {
-            "db" : db1,
-            "table" : table,
-            "therest" : other_clauses
-            }
-        dmls.append(dml)
+    dmls += _format_dmls(table, db1, db2, (column_drop + index_drop), prettyprint)
+    dmls += _format_dmls(table, db1, db2, (column_add +
+                                           index_add + column_modify),
+                         prettyprint)
 
     return dmls
-            
 
 def diff_databases(cursor, db1, db2):
     tquery = "select table_name from information_schema.tables where table_schema = '%s'"
@@ -607,14 +608,14 @@ def diff_databases(cursor, db1, db2):
     dmls = []
     if len(db1only) > 0:
         for dropme in db1only:
-            dmls.append("DROP TABLE %(db)s.%(table)s" % {
+            dmls.append("DROP TABLE %(db)s.%(table)s;" % {
                 "db" : db1,
                 "table" : dropme })
 
     print "adding new tables"
     if len(db2only) > 0:
         for addme in db2only:
-            dmls.append("CREATE TABLE %(db1)s.%(table)s LIKE %(db2)s.%(table)s" % {
+            dmls.append("CREATE TABLE %(db1)s.%(table)s LIKE %(db2)s.%(table)s;" % {
                 "db1" : db1,
                 "db2" : db2,
                 "table" : addme })
@@ -623,23 +624,9 @@ def diff_databases(cursor, db1, db2):
 
     common_list = list(common)
     for c in common_list:
-        dmls += diff_table(cursor, c, db1, db2)
+        dmls += diff_table(cursor, c, db1, db2, True)
 
-    for dml in dmls:
-        print dml
-        cursor.execute(dml)
-
-    print "aftermath:"
-    print "%s checksum:  %s" % (db1, dbchecksum(db1))
-    print "%s checksum:  %s" % (db2, dbchecksum(db2))
-
-    fh = open("%s.nml" % db1, 'w')
-    fh.write(normalize(dbdump(db1)))
-    fh.close()
-
-    fh = open("%s.nml" % db2, 'w')
-    fh.write(normalize(dbdump(db2)))
-    fh.close()
+    return dmls
 
 def create_db_from_file(cursor, file):
     fh = open(file, 'r')
@@ -655,13 +642,22 @@ def create_db_from_file(cursor, file):
 def main():
     filterwarnings('ignore', category = MySQLdb.Warning)
     parser = argparse.ArgumentParser()
+    parser.add_argument("--execute", help="actually make the changes",
+                        action="store_true")
+    parser.add_argument("--dmlfile", help="file to write dml statements")
     parser.add_argument("file1", help="input file")
     parser.add_argument("file2", help="input file")
     args = parser.parse_args()
     
     file1 = args.file1
     file2 = args.file2
-    
+
+    execute = False
+    if args.execute:
+        execute = True
+
+    dmlfile = args.dmlfile
+        
     if not os.path.exists(file1):
         print '%s does not exist' % file1
         sys.exit(1)
@@ -731,7 +727,34 @@ def main():
     cursor = conn.cursor()
     
     # finally.  let's get to work.
-    diff_databases(cursor, db1, db2)
+    dmls = diff_databases(cursor, db1, db2)
+
+    if dmlfile:
+        dmlf = open(dmlfile, 'w')
+
+    for dml in dmls:
+        print dml
+        if execute:
+            cursor.execute(dml)
+        if dmlfile:
+            dmlf.write(dml + "\n")
+
+    if dmlfile:
+        dmlf.close()
+        print "wrote file %s" % dmlfile
+
+    if execute:
+        print "aftermath:"
+        print "%s checksum:  %s" % (db1, dbchecksum(db1))
+        print "%s checksum:  %s" % (db2, dbchecksum(db2))
+    
+        fh = open("%s.nml" % db1, 'w')
+        fh.write(normalize(dbdump(db1)))
+        fh.close()
+    
+        fh = open("%s.nml" % db2, 'w')
+        fh.write(normalize(dbdump(db2)))
+        fh.close()
 
 if __name__ == '__main__':
     main()

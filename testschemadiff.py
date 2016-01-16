@@ -173,7 +173,7 @@ class TestColumnDiffDML(unittest.TestCase):
         dmls = schemadiff.diff_table(
             self.cursor, tableName, self.db1, self.db2)
         self.assertEqual(1, len(dmls))
-        control = "ALTER TABLE %(db)s.%(table)s DROP COLUMN objectId" % {
+        control = "ALTER TABLE %(db)s.%(table)s DROP COLUMN objectId;" % {
             "db" : self.db1,
             "table" : tableName
             }
@@ -204,7 +204,7 @@ class TestColumnDiffDML(unittest.TestCase):
             self.cursor, tableName, self.db1, self.db2)
         self.assertEqual(1, len(dmls))
 
-        control = "ALTER TABLE %(db)s.%(table)s MODIFY COLUMN objectType smallint(6) NOT NULL" % {
+        control = "ALTER TABLE %(db)s.%(table)s MODIFY COLUMN objectType smallint(6) NOT NULL;" % {
             "db" : self.db1,
             "table" : tableName
             }
@@ -235,7 +235,7 @@ class TestColumnDiffDML(unittest.TestCase):
             self.cursor, tableName, self.db1, self.db2)
         self.assertEqual(1, len(dmls))
 
-        control = "ALTER TABLE %(db)s.%(table)s MODIFY COLUMN objectType int(11)" % {
+        control = "ALTER TABLE %(db)s.%(table)s MODIFY COLUMN objectType int(11);" % {
             "db" : self.db1,
             "table" : tableName
             }
@@ -266,7 +266,7 @@ class TestColumnDiffDML(unittest.TestCase):
             self.cursor, tableName, self.db1, self.db2)
         self.assertEqual(1, len(dmls))
 
-        control = "ALTER TABLE %(db)s.%(table)s MODIFY COLUMN objectType int(11) NOT NULL" % {
+        control = "ALTER TABLE %(db)s.%(table)s MODIFY COLUMN objectType int(11) NOT NULL;" % {
             "db" : self.db1,
             "table" : tableName
             }
@@ -296,7 +296,7 @@ class TestColumnDiffDML(unittest.TestCase):
             self.cursor, tableName, self.db1, self.db2)
         self.assertEqual(1, len(dmls))
 
-        control = "ALTER TABLE %(db)s.%(table)s ADD COLUMN objectId bigint(20) NOT NULL" % {
+        control = "ALTER TABLE %(db)s.%(table)s ADD COLUMN objectId bigint(20) NOT NULL;" % {
             "db" : self.db1,
             "table" : tableName
             }
@@ -327,7 +327,7 @@ class TestColumnDiffDML(unittest.TestCase):
             self.cursor, tableName, self.db1, self.db2)
         self.assertEqual(1, len(dmls))
 
-        control = "ALTER TABLE %(db)s.%(table)s ADD COLUMN objectId bigint(20)" % {
+        control = "ALTER TABLE %(db)s.%(table)s ADD COLUMN objectId bigint(20);" % {
             "db" : self.db1,
             "table" : tableName
             }
@@ -362,7 +362,7 @@ class TestColumnDiffDML(unittest.TestCase):
         self.assertEqual(2, len(dmls))
 
         control = ("ALTER TABLE %(db)s.%(table)s "
-                   "DROP COLUMN objectId") % {
+                   "DROP COLUMN objectId;") % {
             "db" : self.db1,
             "table" : tableName
             }
@@ -370,7 +370,7 @@ class TestColumnDiffDML(unittest.TestCase):
 
         control = ("ALTER TABLE %(db)s.%(table)s "
                    "ADD COLUMN objectNamespaceAndId bigint(20) NOT NULL, "
-                   "MODIFY COLUMN objectType smallint(6) unsigned NOT NULL") % {
+                   "MODIFY COLUMN objectType smallint(6) unsigned NOT NULL;") % {
             "db" : self.db1,
             "table" : tableName
             }
@@ -557,7 +557,7 @@ class TestIndexDiffDML(unittest.TestCase):
         self.assertEqual(1, len(dmls))
 
         control = ("ALTER TABLE %(db)s.%(table)s "
-                   "DROP INDEX key_drop") % {
+                   "DROP INDEX key_drop;") % {
             "db" : self.db1,
             "table" : tableName }
         self.assertEqual(control, dmls[0])
@@ -593,7 +593,7 @@ class TestIndexDiffDML(unittest.TestCase):
             self.cursor, tableName, self.db1, self.db2)
         self.assertEqual(1, len(dmls))
         control = ("ALTER TABLE %(db)s.%(table)s "
-                   "ADD KEY key_add(column3)") % {
+                   "ADD KEY key_add(column3);") % {
             "db" : self.db1,
             "table" : tableName }
         self.assertEqual(control, dmls[0])
@@ -631,14 +631,14 @@ class TestIndexDiffDML(unittest.TestCase):
         self.assertEqual(2, len(dmls))
 
         control1 = ("ALTER TABLE %(db)s.%(table)s "
-                    "DROP INDEX key_add"
+                    "DROP INDEX key_add;"
                    ) % {
             "db" : self.db1,
             "table" : tableName }
         self.assertEqual(control1, dmls[0])
 
         control2 = ("ALTER TABLE %(db)s.%(table)s "
-                   "ADD KEY key_add(column2,column3)"
+                   "ADD KEY key_add(column2,column3);"
                    ) % {
             "db" : self.db1,
             "table" : tableName }
@@ -676,7 +676,7 @@ class TestIndexDiffDML(unittest.TestCase):
             self.cursor, tableName, self.db1, self.db2)
         self.assertEqual(1, len(dmls))
         control = ("ALTER TABLE %(db)s.%(table)s "
-                   "DROP PRIMARY KEY") % {
+                   "DROP PRIMARY KEY;") % {
             "db" : self.db1,
             "table" : tableName }
         self.assertEqual(control, dmls[0])
@@ -709,7 +709,7 @@ class TestIndexDiffDML(unittest.TestCase):
             self.cursor, tableName, self.db1, self.db2)
         self.assertEqual(1, len(dmls))
         control = ("ALTER TABLE %(db)s.%(table)s "
-                   "ADD PRIMARY KEY(column1,column2)") % {
+                   "ADD PRIMARY KEY(column1,column2);") % {
             "db" : self.db1,
             "table" : tableName }
         self.assertEqual(control, dmls[0])
@@ -744,14 +744,14 @@ class TestIndexDiffDML(unittest.TestCase):
         self.assertEqual(2, len(dmls))
 
         control1 = ("ALTER TABLE %(db)s.%(table)s "
-                   "DROP PRIMARY KEY"
+                   "DROP PRIMARY KEY;"
                    ) % {
             "db" : self.db1,
             "table" : tableName }
         self.assertEqual(control1, dmls[0])
 
         control2 = ("ALTER TABLE %(db)s.%(table)s "
-                    "ADD PRIMARY KEY(column1,column2)"
+                    "ADD PRIMARY KEY(column1,column2);"
                    ) % {
             "db" : self.db1,
             "table" : tableName }
@@ -1458,14 +1458,14 @@ class TestFKDiffDML(unittest.TestCase):
         self.assertEqual(2, len(dmls))
 
         control1 = ("ALTER TABLE %(db)s.%(table)s "
-                    "DROP FOREIGN KEY fk"
+                    "DROP FOREIGN KEY fk;"
                    ) % {
             "db" : self.db1,
             "table" : tableName }
         self.assertEqual(control1, dmls[0])
 
         control2 = ("ALTER TABLE %(db)s.%(table)s "
-                    "ADD CONSTRAINT fk FOREIGN KEY (column1) REFERENCES reftable(column1)"
+                    "ADD CONSTRAINT fk FOREIGN KEY (column1) REFERENCES reftable(column1);"
                    ) % {
             "db" : self.db1,
             "table" : tableName }
@@ -1509,12 +1509,12 @@ class TestFKDiffDML(unittest.TestCase):
             self.cursor, tableName, self.db1, self.db2)
         self.assertEqual(1, len(dmls))
 
-        control1 = ("ALTER TABLE %(db)s.%(table)s "
-                    "DROP FOREIGN KEY fk"
+        control = ("ALTER TABLE %(db)s.%(table)s "
+                    "DROP FOREIGN KEY fk;"
                    ) % {
             "db" : self.db1,
             "table" : tableName }
-        self.assertEqual(control1, dmls[0])
+        self.assertEqual(control, dmls[0])
 
     def testAddFK(self):
         """
@@ -1554,7 +1554,7 @@ class TestFKDiffDML(unittest.TestCase):
             self.cursor, tableName, self.db1, self.db2)
         self.assertEqual(1, len(dmls))
         control1 = ("ALTER TABLE %(db)s.%(table)s "
-                    "ADD CONSTRAINT fk FOREIGN KEY (column1,column2) REFERENCES reftable(column1,column2)"
+                    "ADD CONSTRAINT fk FOREIGN KEY (column1,column2) REFERENCES reftable(column1,column2);"
                    ) % {
             "db" : self.db1,
             "table" : tableName }
