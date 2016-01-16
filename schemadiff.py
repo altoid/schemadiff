@@ -485,7 +485,6 @@ concat(
     if(is_nullable = 'NO', ' NOT NULL', ''),
     case
     when column_default is null then ''
-    when column_default = '' then ''
     when column_type like '%%char%%' then concat(' DEFAULT ''', column_default, '''')
     when column_type like '%%text' then concat(' DEFAULT ''', column_default, '''')
     when column_type = 'timestamp' and column_default <> 'current_timestamp' then concat(' DEFAULT ''', column_default, '''')
@@ -633,6 +632,14 @@ def diff_databases(cursor, db1, db2):
     print "aftermath:"
     print "%s checksum:  %s" % (db1, dbchecksum(db1))
     print "%s checksum:  %s" % (db2, dbchecksum(db2))
+
+    fh = open("%s.nml" % db1, 'w')
+    fh.write(normalize(dbdump(db1)))
+    fh.close()
+
+    fh = open("%s.nml" % db2, 'w')
+    fh.write(normalize(dbdump(db2)))
+    fh.close()
 
 def create_db_from_file(cursor, file):
     fh = open(file, 'r')
