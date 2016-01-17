@@ -18,7 +18,6 @@
 # TODO:  foreign keys
 #        - change ON UPDATE, ON DELETE
 #
-# TODO:  handle comments - escape chars before reinserting
 
 import MySQLdb
 # docs at http://mysql-python.sourceforge.net/MySQLdb.html
@@ -105,6 +104,9 @@ def dbdump(dbname):
 
 def dbchecksum(dbname):
     return shacmd(normalize(dbdump(dbname)))
+
+def schemachecksum(dbschema):
+    return shacmd(normalize(dbschema))
 
 def diff_fks(cursor, table, db1, db2):
     query = """
@@ -628,10 +630,15 @@ def diff_databases(cursor, db1, db2):
 
     return dmls
 
-def create_db_from_file(cursor, file):
+def read_schema_from_file(cursor, file):
     fh = open(file, 'r')
     schema = fh.read()
     schema = string.replace(schema, '%DB_COLLATION_CREATE_TABLE_COMMON%', '')
+    
+    fh.close()
+    return schema
+
+def create_db_from_schema(cursor, schema):
     ddls = schema.split(';')
     for ddl in ddls:
         ddl = ddl.strip()
@@ -715,8 +722,18 @@ def main():
     conn2 = dsn.getConnection(db2)
     cursor2 = conn2.cursor()
     
-    create_db_from_file(cursor1, file1)
-    create_db_from_file(cursor2, file2)
+    schema1 = read_schema_from_file(cursor1, file1)
+    schema2 = read_schema_from_file(cursor2, file2)
+
+    cs1 = schemachecksum(schema1)
+    cs2 = schemachecksum(schema2)
+
+    if cs1 == cs2:
+        print "databases are the same, nothing to do"
+        sys.exit(0)
+
+    create_db_from_schema(cursor1, schema1)
+    create_db_from_schema(cursor2, schema2)
     
     cursor1.close()
     conn1.close()
