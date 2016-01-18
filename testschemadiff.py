@@ -61,8 +61,8 @@ class TestBasic(unittest.TestCase):
 
 class TestSetup(unittest.TestCase):
 
-    db1 = 'schemadiff_testsetup_old'
-    db2 = 'schemadiff_testsetup_new'
+    db1 = 'TestSetup_old'
+    db2 = 'TestSetup_new'
     dbconn = None
     cursor = None
 
@@ -103,8 +103,8 @@ class TestColumnDiffDML(unittest.TestCase):
     test add/drop/change columns.  tests
     correctness of DML statement but does not execute it.
     """
-    db1 = 'schemadiff_testtablediff_old'
-    db2 = 'schemadiff_testtablediff_new'
+    db1 = 'TestColumnDiffDML_old'
+    db2 = 'TestColumnDiffDML_new'
     dbconn = None
     cursor = None
 
@@ -390,8 +390,8 @@ class TestColumnDiff(unittest.TestCase):
     columns only, no keys.
     """
 
-    db1 = 'schemadiff_testaltertable_old'
-    db2 = 'schemadiff_testaltertable_new'
+    db1 = 'TestColumnDiff_old'
+    db2 = 'TestColumnDiff_new'
     dbconn = None
     cursor = None
 
@@ -511,8 +511,8 @@ class TestColumnDiff(unittest.TestCase):
 class TestIndexDiffDML(unittest.TestCase):
     # changing has to be done as drop-then-add
 
-    db1 = 'schemadiff_testindexdiffdml_old'
-    db2 = 'schemadiff_testindexdiffdml_new'
+    db1 = 'TestIndexDiffDML_old'
+    db2 = 'TestIndexDiffDML_new'
     dbconn = None
     cursor = None
 
@@ -758,19 +758,19 @@ class TestIndexDiffDML(unittest.TestCase):
         self.assertEqual(control2, dmls[1])
 
     def tearDown(self):
-#        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db1 })
-#        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db2 })
-#
-#        self.cursor.close()
-#        self.dbconn.close()
+        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db1 })
+        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db2 })
+
+        self.cursor.close()
+        self.dbconn.close()
         pass
 
 
 class TestIndexDiff(unittest.TestCase):
     # changing has to be done as drop-then-add
 
-    db1 = 'schemadiff_testindexdiff_old'
-    db2 = 'schemadiff_testindexdiff_new'
+    db1 = 'TestIndexDiff_old'
+    db2 = 'TestIndexDiff_new'
     dbconn = None
     cursor = None
 
@@ -997,8 +997,8 @@ class TestDrop(unittest.TestCase):
     test for good behavior when indexed columns are dropped.
     """
 
-    db1 = 'schemadiff_testdrop_old'
-    db2 = 'schemadiff_testdrop_new'
+    db1 = 'TestDrop_old'
+    db2 = 'TestDrop_new'
     dbconn = None
     cursor = None
 
@@ -1144,8 +1144,8 @@ class TestDrop(unittest.TestCase):
 
 
 class TestUniqueIndex(unittest.TestCase):
-    db1 = 'schemadiff_testuniqueindex_old'
-    db2 = 'schemadiff_testuniqueindex_new'
+    db1 = 'TestUniqueIndex_old'
+    db2 = 'TestUniqueIndex_new'
     dbconn = None
     cursor = None
 
@@ -1374,8 +1374,8 @@ class TestUniqueIndex(unittest.TestCase):
         self.dbconn.close()
 
 class TestFKDiffDML(unittest.TestCase):
-    db1 = 'fk_old'
-    db2 = 'fk_new'
+    db1 = 'TestFKDiffDML_old'
+    db2 = 'TestFKDiffDML_new'
     dbconn = None
     cursor = None
 
@@ -1561,16 +1561,16 @@ class TestFKDiffDML(unittest.TestCase):
         self.assertEqual(control1, dmls[0])
 
     def tearDown(self):
-#        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db1 })
-#        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db2 })
-#
-#        self.cursor.close()
-#        self.dbconn.close()
+        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db1 })
+        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db2 })
+
+        self.cursor.close()
+        self.dbconn.close()
         pass
 
 class TestFKDiff(unittest.TestCase):
-    db1 = 'fk_old'
-    db2 = 'fk_new'
+    db1 = 'TestFKDiff_old'
+    db2 = 'TestFKDiff_new'
     dbconn = None
     cursor = None
 
@@ -1704,17 +1704,17 @@ class TestFKDiff(unittest.TestCase):
         self.assertEqual(cs1, cs2)
 
     def tearDown(self):
-#        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db1 })
-#        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db2 })
-#
-#        self.cursor.close()
-#        self.dbconn.close()
+        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db1 })
+        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db2 })
+
+        self.cursor.close()
+        self.dbconn.close()
         pass
 
 
 class TestMisc(unittest.TestCase):
-    db1 = 'schemadiff_misc_old'
-    db2 = 'schemadiff_misc_new'
+    db1 = 'TestMisc_old'
+    db2 = 'TestMisc_new'
     dbconn = None
     cursor = None
 
@@ -1970,11 +1970,11 @@ class TestMisc(unittest.TestCase):
         self.assertEqual(cs1, cs2)
 
     def tearDown(self):
-#        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db1 })
-#        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db2 })
-#
-#        self.cursor.close()
-#        self.dbconn.close()
+        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db1 })
+        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db2 })
+
+        self.cursor.close()
+        self.dbconn.close()
         pass
 
 if __name__ == '__main__':

@@ -773,5 +773,11 @@ def main():
         fh.write(normalize(dbdump(db2)))
         fh.close()
 
+    cursor.execute("drop database %(db)s" % { "db" : db1 })
+    cursor.execute("drop database %(db)s" % { "db" : db2 })
+
+    cursor.close()
+    conn.close()
+
 if __name__ == '__main__':
     main()
