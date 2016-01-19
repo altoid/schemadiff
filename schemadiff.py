@@ -630,7 +630,7 @@ def diff_databases(cursor, db1, db2):
 
     return dmls
 
-def read_schema_from_file(cursor, file):
+def read_schema_from_file(file):
     fh = open(file, 'r')
     schema = fh.read()
     schema = string.replace(schema, '%DB_COLLATION_CREATE_TABLE_COMMON%', '')
@@ -638,7 +638,11 @@ def read_schema_from_file(cursor, file):
     fh.close()
     return schema
 
-def create_db_from_schema(cursor, schema):
+def create_db_from_schema(cursor, dbname, schema):
+    cursor.execute("drop database if exists %(db)s" % { "db" : dbname })
+    cursor.execute("create database %(db)s" % { "db" : dbname })
+    cursor.execute("use %(db)s" % { "db" : dbname })
+    
     ddls = schema.split(';')
     for ddl in ddls:
         ddl = ddl.strip()
@@ -704,26 +708,8 @@ def main():
         print 'not dealing with same-name schema files right now'
         sys.exit(1)
     
-    db = dsn.getConnection()
-    c = db.cursor()
-    
-    c.execute("drop database if exists %(db)s" % { "db" : db1 })
-    c.execute("create database %(db)s" % { "db" : db1 })
-    
-    c.execute("drop database if exists %(db)s" % { "db" : db2 })
-    c.execute("create database %(db)s" % { "db" : db2 })
-    
-    c.close()
-    db.close()
-    
-    conn1 = dsn.getConnection(db1)
-    cursor1 = conn1.cursor()
-    
-    conn2 = dsn.getConnection(db2)
-    cursor2 = conn2.cursor()
-    
-    schema1 = read_schema_from_file(cursor1, file1)
-    schema2 = read_schema_from_file(cursor2, file2)
+    schema1 = read_schema_from_file(file1)
+    schema2 = read_schema_from_file(file2)
 
     cs1 = schemachecksum(schema1)
     cs2 = schemachecksum(schema2)
@@ -732,16 +718,11 @@ def main():
         print "databases are the same, nothing to do"
         sys.exit(0)
 
-    create_db_from_schema(cursor1, schema1)
-    create_db_from_schema(cursor2, schema2)
-    
-    cursor1.close()
-    conn1.close()
-    cursor2.close()
-    conn2.close()
-    
-    conn = dsn.getConnection('information_schema')
+    conn = dsn.getConnection()
     cursor = conn.cursor()
+    
+    create_db_from_schema(cursor, db1, schema1)
+    create_db_from_schema(cursor, db2, schema2)
     
     # finally.  let's get to work.
     dmls = diff_databases(cursor, db1, db2)
