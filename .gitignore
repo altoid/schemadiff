@@ -1,4 +1,5 @@
 crontab
 **/*~
 dsn.*
+p4credentials.*
 **/*.pyc

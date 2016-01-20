@@ -22,6 +22,7 @@
 import MySQLdb
 # docs at http://mysql-python.sourceforge.net/MySQLdb.html
 
+import logging
 import re
 import sys
 import pprint
@@ -92,15 +93,19 @@ def shacmd(s):
     return hash.hexdigest()
 
 def dbdump(dbname):
-    dumpcmd = "mysqldump -u %(user)s -p%(passwd)s --no-data %(dbname)s" % {
-        "user" : dsn.user,
-        "passwd" : dsn.passwd,
-        "dbname" : dbname
-        }
-
-    # suppress warnings from mysqldump.  i know, i know.
-    with open(os.devnull, 'w') as devnull:
-        return subprocess.check_output(dumpcmd, stderr=devnull, shell=True)
+    try:
+        dumpcmd = "mysqldump -u %(user)s -p%(passwd)s --no-data %(dbname)s" % {
+            "user" : dsn.user,
+            "passwd" : dsn.passwd,
+            "dbname" : dbname
+            }
+    
+        # suppress warnings from mysqldump.  i know, i know.
+        with open(os.devnull, 'w') as devnull:
+            return subprocess.check_output(dumpcmd, stderr=devnull, shell=True)
+    except Exception as e:
+        print e
+        raise
 
 def dbchecksum(dbname):
     return shacmd(normalize(dbdump(dbname)))
@@ -109,6 +114,7 @@ def schemachecksum(dbschema):
     return shacmd(normalize(dbschema))
 
 def diff_fks(cursor, table, db1, db2):
+    logging.debug(">>>>>>>>>>>")
     query = """
 select
 	local_part.constraint_name,
@@ -222,6 +228,7 @@ and local_part.table_name = '%(table)s'
     return drop_clauses, add_clauses
 
 def diff_plain_indexes(cursor, table, db1, db2):
+    logging.debug(">>>>>>>>>>>")
     query = """
 select
     s.index_name,
@@ -320,6 +327,7 @@ group by s.table_catalog, s.table_schema, s.table_name, s.index_name
 
 def diff_constrained_indexes(cursor, table, db1, db2):
     # UNIQUE or PRIMARY KEY indexes
+    logging.debug(">>>>>>>>>>>")
     query = """
 
 select
@@ -421,6 +429,7 @@ group by
     return drop_clauses, add_clauses
 
 def diff_table_indexes(cursor, table, db1, db2):
+    logging.debug(">>>>>>>>>>>")
     drop_clauses = []
     add_clauses = []
 
@@ -447,6 +456,7 @@ def diff_table_indexes(cursor, table, db1, db2):
 
 def diff_table_columns(cursor, table, db1, db2):
     query = "select column_name from information_schema.columns where table_schema = '%s' and table_name = '%s'"
+    logging.debug(">>>>>>>>>>>")
     q1 = query % (db1, table)
     q2 = query % (db2, table)
 
@@ -543,7 +553,6 @@ concat(
     return drop_clauses, add_clauses, modify_clauses
 
 def _format_dmls(table, db1, db2, clauses, prettyprint):
-
     dmls = []
     
     if len(clauses) > 0:
@@ -567,9 +576,10 @@ def _format_dmls(table, db1, db2, clauses, prettyprint):
     return dmls
 
 def diff_table(cursor, table, db1, db2, prettyprint=False):
+    logging.debug("diffing table %s" % table)
     (column_drop, column_add, column_modify) = diff_table_columns(cursor, table, db1, db2)
     (index_drop, index_add) = diff_table_indexes(cursor, table, db1, db2)
-
+    logging.debug("done diffing table %s" % table)
     dmls = []
     dmls += _format_dmls(table, db1, db2, (column_drop + index_drop), prettyprint)
     dmls += _format_dmls(table, db1, db2, (column_add +
@@ -586,27 +596,24 @@ def diff_databases(cursor, db1, db2):
     db1tables = set()
     db2tables = set()
 
-    print "getting tables for %s" % db1
+    logging.debug("getting tables for %s" % db1)
     cursor.execute(q1)
     for row in cursor.fetchall():
         d = dict(zip(['table_name'],
                      row))
         db1tables.add(d['table_name'])
 
-    print "getting tables for %s" % db2
+    logging.debug("getting tables for %s" % db2)
     cursor.execute(q2)
     for row in cursor.fetchall():
         d = dict(zip(['table_name'],
                      row))
         db2tables.add(d['table_name'])
 
-    print "done with all that"
-
     common = db1tables & db2tables
     db1only = db1tables - db2tables
     db2only = db2tables - db1tables
 
-    print "dropping obsolete tables"
     dmls = []
     if len(db1only) > 0:
         for dropme in db1only:
@@ -614,15 +621,12 @@ def diff_databases(cursor, db1, db2):
                 "db" : db1,
                 "table" : dropme })
 
-    print "adding new tables"
     if len(db2only) > 0:
         for addme in db2only:
             dmls.append("CREATE TABLE %(db1)s.%(table)s LIKE %(db2)s.%(table)s;" % {
                 "db1" : db1,
                 "db2" : db2,
                 "table" : addme })
-
-    print "dealing with columns and indexes"
 
     common_list = list(common)
     for c in common_list:
@@ -650,8 +654,61 @@ def create_db_from_schema(cursor, dbname, schema):
             continue
         cursor.execute(ddl)
 
-def main():
+def diff_schemas(cursor, schema1, schema2, db1, db2, **kwargs):
+    """
+    kwargs:
+    execute:  True or False
+    dmlfile:  name of file to which DML statements should be written.
+    """
+
+    logging.debug(">>>>>>>>")
     filterwarnings('ignore', category = MySQLdb.Warning)
+    cs1 = schemachecksum(schema1)
+    cs2 = schemachecksum(schema2)
+    logging.debug("got schema checksums")
+
+    if cs1 == cs2:
+        print "databases are the same, nothing to do"
+        return
+
+    logging.debug("creating database %s" % db1)
+    create_db_from_schema(cursor, db1, schema1)
+    logging.debug("creating database %s" % db2)
+    create_db_from_schema(cursor, db2, schema2)
+    
+    dmls = diff_databases(cursor, db1, db2)
+
+    dmlfile = kwargs['dmlfile']
+    if dmlfile:
+        dmlf = open(dmlfile, 'w')
+
+    execute = kwargs['execute']
+
+    for dml in dmls:
+        print dml
+        if execute:
+            cursor.execute(dml)
+        if dmlfile:
+            dmlf.write(dml + "\n")
+
+    if dmlfile:
+        dmlf.close()
+        print "wrote file %s" % dmlfile
+
+    if execute:
+        print "aftermath:"
+        print "%s checksum:  %s" % (db1, dbchecksum(db1))
+        print "%s checksum:  %s" % (db2, dbchecksum(db2))
+    
+        fh = open("%s.nml" % db1, 'w')
+        fh.write(normalize(dbdump(db1)))
+        fh.close()
+    
+        fh = open("%s.nml" % db2, 'w')
+        fh.write(normalize(dbdump(db2)))
+        fh.close()
+
+def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--execute", help="actually make the changes",
                         action="store_true")
@@ -692,14 +749,14 @@ def main():
     path1 = os.path.abspath(file1)
     path2 = os.path.abspath(file2)
     
-    # need 2 hash objects in order to use them independently
-    # for each path
-    
-    hash1 = hashlib.md5()
-    hash2 = hash1.copy()
-    
-    hash1.update(path1)
-    hash2.update(path2)
+#    # need 2 hash objects in order to use them independently
+#    # for each path
+#    
+#    hash1 = hashlib.md5()
+#    hash2 = hash1.copy()
+#    
+#    hash1.update(path1)
+#    hash2.update(path2)
     
     db1 = "%s" % (os.path.splitext(file1)[0])
     db2 = "%s" % (os.path.splitext(file2)[0])
@@ -708,51 +765,15 @@ def main():
         print 'not dealing with same-name schema files right now'
         sys.exit(1)
     
+    # finally.  let's get to work.
+
     schema1 = read_schema_from_file(file1)
     schema2 = read_schema_from_file(file2)
-
-    cs1 = schemachecksum(schema1)
-    cs2 = schemachecksum(schema2)
-
-    if cs1 == cs2:
-        print "databases are the same, nothing to do"
-        sys.exit(0)
 
     conn = dsn.getConnection()
     cursor = conn.cursor()
     
-    create_db_from_schema(cursor, db1, schema1)
-    create_db_from_schema(cursor, db2, schema2)
-    
-    # finally.  let's get to work.
-    dmls = diff_databases(cursor, db1, db2)
-
-    if dmlfile:
-        dmlf = open(dmlfile, 'w')
-
-    for dml in dmls:
-        print dml
-        if execute:
-            cursor.execute(dml)
-        if dmlfile:
-            dmlf.write(dml + "\n")
-
-    if dmlfile:
-        dmlf.close()
-        print "wrote file %s" % dmlfile
-
-    if execute:
-        print "aftermath:"
-        print "%s checksum:  %s" % (db1, dbchecksum(db1))
-        print "%s checksum:  %s" % (db2, dbchecksum(db2))
-    
-        fh = open("%s.nml" % db1, 'w')
-        fh.write(normalize(dbdump(db1)))
-        fh.close()
-    
-        fh = open("%s.nml" % db2, 'w')
-        fh.write(normalize(dbdump(db2)))
-        fh.close()
+    diff_schemas(cursor, schema1, schema2, db1, db2, dmlfile=dmlfile, execute=execute)
 
     cursor.execute("drop database %(db)s" % { "db" : db1 })
     cursor.execute("drop database %(db)s" % { "db" : db2 })
@@ -761,4 +782,8 @@ def main():
     conn.close()
 
 if __name__ == '__main__':
+
+    FORMAT = "%(asctime)-15s %(funcName)s %(message)s"
+    logging.basicConfig(format=FORMAT, level=logging.DEBUG)
+
     main()
