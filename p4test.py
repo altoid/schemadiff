@@ -65,7 +65,7 @@ def bss_date(p4, branch):
 
     date_re = r'\d\d\d\d\.\d\d\.\d\d-\d\d\d\d'
     date_pattern = re.compile(date_re)
-    line_pattern = re.compile(r'BuildArch.*rhel5.*ServiceSchemaBuild.*' + date_re, re.IGNORECASE)
+    line_pattern = re.compile(p4credentials.bss_regex + date_re, re.IGNORECASE)
 
     # find the line that matches, then dig out the timestamp from it.
     # there should be exactly one matching line.
