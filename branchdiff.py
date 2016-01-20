@@ -103,95 +103,15 @@ def diff_branches(p4, cursor, filespec, frombranch, tobranch, dmlfile):
     cursor.execute("drop database %(db)s" % { "db" : frombranch })
     cursor.execute("drop database %(db)s" % { "db" : tobranch })
 
-def log_in_to_p4(p4):
-    try:
-        # log in with existing ticket, if it's there.
-        # need a way to find out if the current ticket is expired.
-        # looks like p4python can't tell us that.
-
-        p4.connect()
-        tix = p4.run_tickets()
-        if len(tix) > 0:
-            return
-
-        # we fall through to the code below and prompt for login
-        # credentials.  this won't work if we have an existing
-        # connection.  so, disconnect.
-        p4.disconnect()
-
-        # prompt for user
-        default_p4_user = ''
-        default_p4_client = ''
-        default_p4_port = ''
-
-        if 'P4USER' in os.environ:
-            default_p4_user = os.environ['P4USER']
-        elif 'USER' in os.environ:
-            default_p4_user = os.environ['USER']
-
-        if (len(default_p4_user) == 0):
-            prompt = "p4 user: "
-        else:
-            prompt = "p4 user [%s]: " % default_p4_user
-
-        input_p4_user = raw_input(prompt).strip()
-        if len(input_p4_user) == 0:
-            input_p4_user = default_p4_user
-        p4.user = input_p4_user
-
-        # prompt for client
-        if 'P4CLIENT' in os.environ:
-            default_p4_client = os.environ['P4CLIENT']
-
-        if (len(default_p4_client) == 0):
-            prompt = "p4 client: "
-        else:
-            prompt = "p4 client [%s]: " % default_p4_client
-
-        input_p4_client = raw_input(prompt).strip()
-        if len(input_p4_client) == 0:
-            input_p4_client = default_p4_client
-        p4.client = input_p4_client
-
-        # prompt for port
-        if 'P4PORT' in os.environ:
-            default_p4_port = os.environ['P4PORT']
-
-        if (len(default_p4_port) == 0):
-            prompt = "p4 port: "
-        else:
-            prompt = "p4 port [%s]: " % default_p4_port
-
-        input_p4_port = raw_input(prompt).strip()
-        if len(input_p4_port) == 0:
-            input_p4_port = default_p4_port
-        p4.port = input_p4_port
-
-        # prompt for password
-        p4.password = getpass.getpass("P4 password:")
-        p4.connect()
-        p4.run_login()
-        print "user %s connected to perforce" % input_p4_user
-        logging.debug("P4 ticket: |%s|" % p4.password)
-
-    except P4.P4Exception as e:
-        p4.disconnect()
-        for e in p4.warnings:
-            logging.warning(e)
-        for e in p4.errors:
-            if not str(e).startswith("Password invalid"):
-                # something else went wrong
-                raise
-
 if __name__ == '__main__':
     filterwarnings('ignore', category = MySQLdb.Warning)
     FORMAT = "%(asctime)-15s %(funcName)s %(levelname)s %(message)s"
     logging.basicConfig(format=FORMAT, level=logging.DEBUG)
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--oldbranch",
+    parser.add_argument("oldbranch",
                         help="branch to which we will apply diffs")
-    parser.add_argument("--newbranch",
+    parser.add_argument("newbranch",
                         help="branch from which we will apply diffs")
     parser.add_argument("--database",
                         help="service or trio")
@@ -219,7 +139,7 @@ if __name__ == '__main__':
     cursor = None
 
     try:
-        log_in_to_p4(p4)
+        schemadiff.log_in_to_p4(p4)
         if p4 is None:
             print "could not connect to perforce, quitting"
             sys.exit(1)
