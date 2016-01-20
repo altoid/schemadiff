@@ -567,7 +567,6 @@ def diff_table(cursor, table, db1, db2, prettyprint=False):
     logging.debug("diffing table %s" % table)
     (column_drop, column_add, column_modify) = diff_table_columns(cursor, table, db1, db2)
     (index_drop, index_add) = diff_table_indexes(cursor, table, db1, db2)
-    logging.debug("done diffing table %s" % table)
     dmls = []
     dmls += _format_dmls(table, db1, db2, (column_drop + index_drop), prettyprint)
     dmls += _format_dmls(table, db1, db2, (column_add +

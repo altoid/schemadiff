@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import argparse
 import os
 import sys
 import getpass
@@ -14,48 +15,6 @@ import p4credentials
 import subprocess
 from warnings import filterwarnings
 
-def compare():
-    p4 = P4.P4()
-    
-    p4.port = p4credentials.p4port
-    p4.user = p4credentials.p4user
-    p4.client = p4credentials.p4client
-    
-    conn = None
-    cursor = None
-    
-    try:
-        conn = dsn.getConnection()
-        cursor = conn.cursor()
-    
-        p4.connect()
-    
-        result = p4.run('print', '-q', p4credentials.filespec + '#47')
-    
-        # result is an array.  [0] is metadata.  the rest of the
-        # array is the file, broken up into chunks, for some bizarre reason.
-    
-        schema47 = ''.join(result[1:])
-        schema47 = string.replace(schema47, '%DB_COLLATION_CREATE_TABLE_COMMON%', '')
-    
-        result = p4.run('print', '-q', p4credentials.filespec + '#49')
-        schema49 = ''.join(result[1:])
-        schema49 = string.replace(schema49, '%DB_COLLATION_CREATE_TABLE_COMMON%', '')
-    
-        schemadiff.driver(cursor, schema47, schema49, 'schema47', 'schema49',
-                          execute=True, dmlfile='p4test.sql')
-    
-    except P4.P4Exception:
-        for e in p4.errors:
-            print e
-    finally:
-        p4.disconnect()
-        if cursor:
-            cursor.close()
-        if conn:
-            conn.close()
-
-##############
 def bss_date(p4, branch):
     """
     get timestamp for b-serviceschema in the given branch.  this will
@@ -155,10 +114,10 @@ def log_in_to_p4(p4):
         if len(tix) > 0:
             return
 
+        # we fall through to the code below and prompt for login
+        # credentials.  this won't work if we have an existing
+        # connection.  so, disconnect.
         p4.disconnect()
-
-        # disconnect.  we fall through to the code below
-        # and prompt for login credentials.
 
         # prompt for user
         default_p4_user = ''
@@ -229,6 +188,30 @@ if __name__ == '__main__':
     FORMAT = "%(asctime)-15s %(funcName)s %(levelname)s %(message)s"
     logging.basicConfig(format=FORMAT, level=logging.DEBUG)
 
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--oldbranch",
+                        help="branch to which we will apply diffs")
+    parser.add_argument("--newbranch",
+                        help="branch from which we will apply diffs")
+    parser.add_argument("--database",
+                        help="service or trio")
+
+    args = parser.parse_args()
+
+    oldbranch = args.oldbranch
+    newbranch = args.newbranch
+    database = args.database
+
+    if database not in ('service', 'trio'):
+        print "bogus database \"%s\".  use service or trio" % (
+            database)
+        sys.exit(1)
+
+    if database == 'service':
+        filespec = "//depot/b-serviceschema/db/schema/common/sql/golden/service.sql"
+    else:
+        filespec = "//depot/b-serviceschema/db/schema/common/sql/golden/trio.sql"
+
     p4 = P4.P4()
     conn = None
     cursor = None
@@ -243,9 +226,9 @@ if __name__ == '__main__':
         cursor = conn.cursor()
 
         diff_branches(p4, cursor,
-                      "//depot/b-serviceschema/db/schema/common/sql/golden/service.sql",
-                      'b-server-036',
-                      'b-server-038')
+                      filespec,
+                      oldbranch,
+                      newbranch)
 
     except P4.P4Exception as p4e:
         logging.error(p4e)
