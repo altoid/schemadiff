@@ -644,7 +644,7 @@ def create_db_from_schema(cursor, dbname, schema):
 def diff_schemas(cursor, schema1, schema2, db1, db2, **kwargs):
     """
     kwargs:
-    execute:  True or False
+    validate:  True or False
     dmlfile:  name of file to which DML statements should be written.
     """
 
@@ -668,11 +668,11 @@ def diff_schemas(cursor, schema1, schema2, db1, db2, **kwargs):
     if dmlfile:
         dmlf = open(dmlfile, 'w')
 
-    execute = kwargs['execute']
+    validate = kwargs['validate']
 
     for dml in dmls:
         print dml
-        if execute:
+        if validate:
             cursor.execute(dml)
         if dmlfile:
             dmlf.write(dml + "\n")
@@ -681,7 +681,7 @@ def diff_schemas(cursor, schema1, schema2, db1, db2, **kwargs):
         dmlf.close()
         print "wrote file %s" % dmlfile
 
-    if execute:
+    if validate:
         print "aftermath:"
         print "%s checksum:  %s" % (db1, dbchecksum(db1))
         print "%s checksum:  %s" % (db2, dbchecksum(db2))
@@ -696,7 +696,7 @@ def diff_schemas(cursor, schema1, schema2, db1, db2, **kwargs):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--execute", help="actually make the changes",
+    parser.add_argument("--validate", help="actually make the changes",
                         action="store_true")
     parser.add_argument("--dmlfile", help="file to write dml statements")
     parser.add_argument("file1", help="input file")
@@ -706,9 +706,9 @@ def main():
     file1 = args.file1
     file2 = args.file2
 
-    execute = False
-    if args.execute:
-        execute = True
+    validate = False
+    if args.validate:
+        validate = True
 
     dmlfile = args.dmlfile
         
@@ -759,7 +759,7 @@ def main():
     conn = dsn.getConnection()
     cursor = conn.cursor()
     
-    diff_schemas(cursor, schema1, schema2, db1, db2, dmlfile=dmlfile, execute=execute)
+    diff_schemas(cursor, schema1, schema2, db1, db2, dmlfile=dmlfile, validate=validate)
 
     cursor.execute("drop database %(db)s" % { "db" : db1 })
     cursor.execute("drop database %(db)s" % { "db" : db2 })

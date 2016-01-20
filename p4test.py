@@ -78,7 +78,7 @@ def get_schema_for_branch(p4, filespec, branch):
 
     return result
 
-def diff_branches(p4, cursor, filespec, frombranch, tobranch):
+def diff_branches(p4, cursor, filespec, frombranch, tobranch, dmlfile):
     """
     show the changes needed to turn the schema in frombranch to the one in tobranch.
     """
@@ -97,8 +97,8 @@ def diff_branches(p4, cursor, filespec, frombranch, tobranch):
 
     schemadiff.diff_schemas(cursor, fromschema, toschema,
                             frombranch, tobranch,
-                            dmlfile='woohoo.sql',
-                            execute=True)
+                            dmlfile=dmlfile,
+                            validate=True)
 
     cursor.execute("drop database %(db)s" % { "db" : frombranch })
     cursor.execute("drop database %(db)s" % { "db" : tobranch })
@@ -195,12 +195,14 @@ if __name__ == '__main__':
                         help="branch from which we will apply diffs")
     parser.add_argument("--database",
                         help="service or trio")
+    parser.add_argument("--dmlfile", help="file to write dml statements")
 
     args = parser.parse_args()
 
     oldbranch = args.oldbranch
     newbranch = args.newbranch
     database = args.database
+    dmlfile = args.dmlfile
 
     if database not in ('service', 'trio'):
         print "bogus database \"%s\".  use service or trio" % (
@@ -225,10 +227,12 @@ if __name__ == '__main__':
         conn = dsn.getConnection()
         cursor = conn.cursor()
 
-        diff_branches(p4, cursor,
+        diff_branches(p4, 
+                      cursor,
                       filespec,
                       oldbranch,
-                      newbranch)
+                      newbranch,
+                      dmlfile)
 
     except P4.P4Exception as p4e:
         logging.error(p4e)
