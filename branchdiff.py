@@ -72,11 +72,7 @@ def get_schema_for_branch(p4, filespec, branch):
         "filespec" : filespec,
         "ts" : p4_ts }
 
-    result = p4.run('print', '-q', version)
-    result = ''.join(result[1:])
-    result = string.replace(result, '%DB_COLLATION_CREATE_TABLE_COMMON%', '')
-
-    return result
+    return schemadiff.get_schema_from_filespec(p4, version)
 
 def diff_branches(p4, cursor, filespec, frombranch, tobranch, dmlfile):
     """

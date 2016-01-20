@@ -774,6 +774,13 @@ def log_in_to_p4(p4):
                 # something else went wrong
                 raise
 
+def get_schema_from_filespec(p4, filespec):
+    result = p4.run('print', '-q', filespec)
+    result = ''.join(result[1:])
+    result = string.replace(result, '%DB_COLLATION_CREATE_TABLE_COMMON%', '')
+
+    return result
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--validate", help="actually make the changes",
