@@ -114,7 +114,6 @@ def schemachecksum(dbschema):
     return shacmd(normalize(dbschema))
 
 def diff_fks(cursor, table, db1, db2):
-    logging.debug(">>>>>>>>>>>")
     query = """
 select
 	local_part.constraint_name,
@@ -228,7 +227,6 @@ and local_part.table_name = '%(table)s'
     return drop_clauses, add_clauses
 
 def diff_plain_indexes(cursor, table, db1, db2):
-    logging.debug(">>>>>>>>>>>")
     query = """
 select
     s.index_name,
@@ -327,7 +325,6 @@ group by s.table_catalog, s.table_schema, s.table_name, s.index_name
 
 def diff_constrained_indexes(cursor, table, db1, db2):
     # UNIQUE or PRIMARY KEY indexes
-    logging.debug(">>>>>>>>>>>")
     query = """
 
 select
@@ -429,26 +426,18 @@ group by
     return drop_clauses, add_clauses
 
 def diff_table_indexes(cursor, table, db1, db2):
-    logging.debug(">>>>>>>>>>>")
     drop_clauses = []
     add_clauses = []
 
     (drop, add) = diff_plain_indexes(cursor, table, db1, db2)
-    # print "plain drop:", drop
-    # print "plain add:", add
-
     drop_clauses += drop
     add_clauses += add
 
     (drop, add) = diff_constrained_indexes(cursor, table, db1, db2)
-    # print "constrained drop:", drop
-    # print "constrained add:", add
     drop_clauses += drop
     add_clauses += add
 
     (drop, add) = diff_fks(cursor, table, db1, db2)
-    # print "fk drop:", drop
-    # print "fk add:", add
     drop_clauses += drop
     add_clauses += add
 
@@ -456,7 +445,6 @@ def diff_table_indexes(cursor, table, db1, db2):
 
 def diff_table_columns(cursor, table, db1, db2):
     query = "select column_name from information_schema.columns where table_schema = '%s' and table_name = '%s'"
-    logging.debug(">>>>>>>>>>>")
     q1 = query % (db1, table)
     q2 = query % (db2, table)
 
@@ -661,7 +649,6 @@ def diff_schemas(cursor, schema1, schema2, db1, db2, **kwargs):
     dmlfile:  name of file to which DML statements should be written.
     """
 
-    logging.debug(">>>>>>>>")
     filterwarnings('ignore', category = MySQLdb.Warning)
     cs1 = schemachecksum(schema1)
     cs2 = schemachecksum(schema2)
