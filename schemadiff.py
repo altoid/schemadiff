@@ -3,7 +3,6 @@
 # TODO:  handle auto_increment columns
 #
 # TODO:  check if the following is the same for the common tables:
-# tables.engine
 # tables.table_collation
 #
 # TODO:  add a hash of the full path to the database names.
@@ -112,6 +111,29 @@ def dbchecksum(dbname):
 
 def schemachecksum(dbschema):
     return shacmd(normalize(dbschema))
+
+def _format_dmls(table, db1, db2, clauses, prettyprint):
+    dmls = []
+    
+    if len(clauses) > 0:
+        if (prettyprint):
+            clauses_str = ',\n\t'.join(clauses)
+            dml = "ALTER TABLE %(db)s.%(table)s\n\t%(therest)s\n\t;" % {
+                "db" : db1,
+                "table" : table,
+                "therest" : clauses_str
+                }    
+        else:
+            clauses_str = ', '.join(clauses)
+            dml = "ALTER TABLE %(db)s.%(table)s %(therest)s;" % {
+                "db" : db1,
+                "table" : table,
+                "therest" : clauses_str
+                }    
+
+        dmls.append(dml)
+
+    return dmls
 
 def diff_fks(cursor, table, db1, db2):
     query = """
@@ -540,37 +562,43 @@ concat(
 
     return drop_clauses, add_clauses, modify_clauses
 
-def _format_dmls(table, db1, db2, clauses, prettyprint):
-    dmls = []
-    
-    if len(clauses) > 0:
-        if (prettyprint):
-            clauses_str = ',\n\t'.join(clauses)
-            dml = "ALTER TABLE %(db)s.%(table)s\n\t%(therest)s\n\t;" % {
-                "db" : db1,
-                "table" : table,
-                "therest" : clauses_str
-                }    
-        else:
-            clauses_str = ', '.join(clauses)
-            dml = "ALTER TABLE %(db)s.%(table)s %(therest)s;" % {
-                "db" : db1,
-                "table" : table,
-                "therest" : clauses_str
-                }    
+def diff_table_engines(cursor, table, db1, db2):
+    query = """
+select engine
+ from information_schema.tables
+ where table_schema = '%(db)s'
+ and table_name = '%(table)s'
+"""
 
-        dmls.append(dml)
+    q1 = query % { "db" : db1, "table" : table }
+    q2 = query % { "db" : db2, "table" : table }
 
-    return dmls
+    select_columns = ['engine']
+    clauses = []
+
+    cursor.execute(q1)
+    for row in cursor.fetchall():
+        engine1 = row[0]
+
+    cursor.execute(q2)
+    for row in cursor.fetchall():
+        engine2 = row[0]
+
+    if engine1 != engine2:
+        clauses.append("ENGINE = %s" % engine2)
+
+    return clauses
 
 def diff_table(cursor, table, db1, db2, prettyprint=False):
     logging.debug("diffing table %s" % table)
     (column_drop, column_add, column_modify) = diff_table_columns(cursor, table, db1, db2)
     (index_drop, index_add) = diff_table_indexes(cursor, table, db1, db2)
+    (engines) = diff_table_engines(cursor, table, db1, db2)
+
     dmls = []
     dmls += _format_dmls(table, db1, db2, (column_drop + index_drop), prettyprint)
     dmls += _format_dmls(table, db1, db2, (column_add +
-                                           index_add + column_modify),
+                                           index_add + column_modify + engines),
                          prettyprint)
 
     return dmls

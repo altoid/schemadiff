@@ -1977,6 +1977,101 @@ class TestMisc(unittest.TestCase):
         self.dbconn.close()
         pass
 
+
+class TestEngine(unittest.TestCase):
+    """
+    these tests actually execute the alter table statement that is generated.
+    columns only, no keys.
+    """
+
+    db1 = 'TestEngine_old'
+    db2 = 'TestEngine_new'
+    dbconn = None
+    cursor = None
+
+    def setUp(self):
+        self.dbconn = dsn.getConnection()
+        self.cursor = self.dbconn.cursor()
+
+        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db1 })
+        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db2 })
+        self.cursor.execute("create database %(db)s" % { "db" : self.db1 })
+        self.cursor.execute("create database %(db)s" % { "db" : self.db2 })
+
+    def testChangeEngine(self):
+        """
+        change storage engine
+        """
+        tableName = 'mytable'
+
+        t1 = """CREATE TABLE `%(table)s` (
+  column1 int not null,
+  column2 varchar(11) not null,
+  column3 timestamp not null,
+  column4 timestamp not null
+) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
+
+        t2 = """CREATE TABLE `%(table)s` (
+  column1 int not null,
+  column2 varchar(11) not null,
+  column3 timestamp not null,
+  column4 timestamp not null
+) ENGINE=MyISAM DEFAULT CHARSET=utf8""" % { "table" : tableName }
+
+        create_tables(self.cursor, [t1], self.db1)
+        create_tables(self.cursor, [t2], self.db2)
+
+        dmls = schemadiff.diff_table(
+            self.cursor, tableName, self.db1, self.db2)
+
+        (cs1, cs2) = apply_table_change(self.cursor,
+                                        tableName,
+                                        self.db1,
+                                        self.db2)
+
+        self.assertEqual(cs1, cs2)
+
+    def testTableDiff(self):
+        """
+        multiple changes, including the engine
+        """
+        tableName = 'mytable'
+
+        t1 = """CREATE TABLE `%(table)s` (
+  `objectType` int(11) NOT NULL,
+  `objectId` bigint(20) NOT NULL,
+  `deleteDate` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
+
+        t2 = """CREATE TABLE `%(table)s` (
+  `deleteDate` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `objectType` smallint(6) unsigned NOT NULL,
+  `objectNamespaceAndId` bigint(20) NOT NULL
+) ENGINE=MyISAM DEFAULT CHARSET=utf8""" % { "table" : tableName }
+
+        self.cursor.execute("use %s" % self.db1)
+        self.cursor.execute(t1)
+
+        self.cursor.execute("use %s" % self.db2)
+        self.cursor.execute(t2)
+
+        dmls = schemadiff.diff_table(
+            self.cursor, tableName, self.db1, self.db2)
+        (cs1, cs2) = apply_table_change(self.cursor,
+                                        tableName,
+                                        self.db1,
+                                        self.db2)
+
+        self.assertEqual(cs1, cs2)
+
+    def tearDown(self):
+        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db1 })
+        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db2 })
+
+        self.cursor.close()
+        self.dbconn.close()
+
+    
 if __name__ == '__main__':
     filterwarnings('ignore', category = MySQLdb.Warning)
     unittest.main()
