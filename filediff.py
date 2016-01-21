@@ -8,12 +8,20 @@ import schemadiff
 import dsn
 from warnings import filterwarnings
 
+def read_schema_from_file(file):
+    fh = open(file, 'r')
+    schema = fh.read()
+    schema = string.replace(schema, '%DB_COLLATION_CREATE_TABLE_COMMON%', '')
+    
+    fh.close()
+    return schema
+
 if __name__ == '__main__':
     FORMAT = "%(asctime)-15s %(funcName)s %(message)s"
     logging.basicConfig(format=FORMAT, level=logging.DEBUG)
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--validate", help="actually make the changes",
+    parser.add_argument("--validate", help="verify that the changes work",
                         action="store_true")
     parser.add_argument("--dmlfile", help="file to write dml statements")
     parser.add_argument("file1", help="input file")
@@ -70,16 +78,14 @@ if __name__ == '__main__':
     
     # finally.  let's get to work.
 
-    schema1 = schemadiff.read_schema_from_file(file1)
-    schema2 = schemadiff.read_schema_from_file(file2)
+    schema1 = read_schema_from_file(file1)
+    schema2 = read_schema_from_file(file2)
 
     conn = dsn.getConnection()
     cursor = conn.cursor()
     
-    schemadiff.diff_schemas(cursor, schema1, schema2, db1, db2, dmlfile=dmlfile, validate=validate)
-
-    cursor.execute("drop database %(db)s" % { "db" : db1 })
-    cursor.execute("drop database %(db)s" % { "db" : db2 })
+    schemadiff.diff_schemas(cursor, schema1, schema2, db1, db2, 
+                            dmlfile=dmlfile, validate=validate)
 
     cursor.close()
     conn.close()

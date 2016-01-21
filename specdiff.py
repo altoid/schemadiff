@@ -26,8 +26,14 @@ if __name__ == '__main__':
     parser.add_argument("newspec",
                         help="p4 filespec for new version of schema")
     parser.add_argument("--dmlfile", help="file to write dml statements")
+    parser.add_argument("--validate", help="verify that the changes work",
+                        action="store_true")
 
     args = parser.parse_args()
+
+    validate = False
+    if args.validate:
+        validate = True
 
     oldspec = args.oldspec
     newspec = args.newspec
@@ -55,7 +61,7 @@ if __name__ == '__main__':
                                 "specdiff_old",
                                 "specdiff_new",
                                 dmlfile=dmlfile,
-                                validate=True)
+                                validate=validate)
 
     except P4.P4Exception as p4e:
         logging.error(p4e)

@@ -621,14 +621,6 @@ def diff_databases(cursor, db1, db2):
 
     return dmls
 
-def read_schema_from_file(file):
-    fh = open(file, 'r')
-    schema = fh.read()
-    schema = string.replace(schema, '%DB_COLLATION_CREATE_TABLE_COMMON%', '')
-    
-    fh.close()
-    return schema
-
 def create_db_from_schema(cursor, dbname, schema):
     cursor.execute("drop database if exists %(db)s" % { "db" : dbname })
     cursor.execute("create database %(db)s" % { "db" : dbname })
@@ -693,6 +685,9 @@ def diff_schemas(cursor, schema1, schema2, db1, db2, **kwargs):
         fh = open("%s.nml" % db2, 'w')
         fh.write(normalize(dbdump(db2)))
         fh.close()
+
+    cursor.execute("drop database %(db)s" % { "db" : db1 })
+    cursor.execute("drop database %(db)s" % { "db" : db2 })
 
 def log_in_to_p4(p4):
     try:
