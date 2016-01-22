@@ -672,16 +672,13 @@ def diff_databases(cursor, db1, db2):
         cursor.execute("show create table %(db2)s.%(table)s;" % replacevalues)
         for row in cursor.fetchall():
             ctable = row[1]
-#            ctable = string.replace(ctable,
-#                                    """CREATE TABLE `%(table)s`""" % replacevalues,
-#                                    """CREATE TABLE `%(db1)s.%(table)s`""" % replacevalues,
-#                                    1)
             dmls.append(ctable + ';')
 
     common_list = list(common)
     for c in common_list:
         dmls += diff_table(cursor, c, db1, db2, True)
 
+    dmls.insert(0, "USE %s;" % db1)
     return dmls
 
 def create_db_from_schema(cursor, dbname, schema):
@@ -718,8 +715,6 @@ def diff_schemas(cursor, schema1, schema2, db1, db2, **kwargs):
     create_db_from_schema(cursor, db2, schema2)
     
     dmls = diff_databases(cursor, db1, db2)
-
-    dmls.insert(0, "USE %s;" % db1)
 
     dmlfile = kwargs['dmlfile']
     if dmlfile:

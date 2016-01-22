@@ -1861,45 +1861,49 @@ class TestDiffDatabases(SchemaDiffTest):
     db1 = 'TestCreateTable_old'
     db2 = 'TestCreateTable_new'
 
-#    def testAddTable(self):
-#        tableName = 'mytable'
-#
-#        s = """CREATE TABLE `%(table)s` (
-#  `author` varchar(128) DEFAULT NULL,
-#  `objectProductOverrideId` bigint(20) NOT NULL,
-#  `createDate` datetime NOT NULL
-#) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
-#
-#        self.cursor.execute("use %s" % self.db2)
-#        self.cursor.execute(s)
-#
-#        dmls = schemadiff.diff_databases(
-#            self.cursor, self.db1, self.db2)
-#        (cs1, cs2) = apply_table_change(self.cursor,
-#                                        tableName,
-#                                        self.db1,
-#                                        self.db2)
-#        self.assertEqual(cs1, cs2)
-#    
-#    def testDropTable(self):
-#        tableName = 'mytable'
-#
-#        s = """CREATE TABLE `%(table)s` (
-#  `author` varchar(128) DEFAULT NULL,
-#  `objectProductOverrideId` bigint(20) NOT NULL,
-#  `createDate` datetime NOT NULL
-#) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
-#
-#        self.cursor.execute("use %s" % self.db1)
-#        self.cursor.execute(s)
-#
-#        dmls = schemadiff.diff_databases(
-#            self.cursor, self.db1, self.db2)
-#        (cs1, cs2) = apply_table_change(self.cursor,
-#                                        tableName,
-#                                        self.db1,
-#                                        self.db2)
-#        self.assertEqual(cs1, cs2)
+    def testAddTable(self):
+        tableName = 'mytable'
+
+        s = """CREATE TABLE `%(table)s` (
+  `author` varchar(128) DEFAULT NULL,
+  `objectProductOverrideId` bigint(20) NOT NULL,
+  `createDate` datetime NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
+
+        self.cursor.execute("use %s" % self.db2)
+        self.cursor.execute(s)
+
+        dmls = schemadiff.diff_databases(
+            self.cursor, self.db1, self.db2)
+        for dml in dmls:
+            self.cursor.execute(dml)
+
+        cs1 = schemadiff.dbchecksum(self.db1)
+        cs2 = schemadiff.dbchecksum(self.db2)
+            
+        self.assertEqual(cs1, cs2)
+    
+    def testDropTable(self):
+        tableName = 'mytable'
+
+        s = """CREATE TABLE `%(table)s` (
+  `author` varchar(128) DEFAULT NULL,
+  `objectProductOverrideId` bigint(20) NOT NULL,
+  `createDate` datetime NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
+
+        self.cursor.execute("use %s" % self.db1)
+        self.cursor.execute(s)
+
+        dmls = schemadiff.diff_databases(
+            self.cursor, self.db1, self.db2)
+        for dml in dmls:
+            self.cursor.execute(dml)
+
+        cs1 = schemadiff.dbchecksum(self.db1)
+        cs2 = schemadiff.dbchecksum(self.db2)
+            
+        self.assertEqual(cs1, cs2)
     
 if __name__ == '__main__':
     FORMAT = "%(asctime)-15s %(funcName)s %(levelname)s %(message)s"
