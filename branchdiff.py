@@ -75,7 +75,7 @@ def get_schema_for_branch(p4, filespec, branch):
     logging.debug("filespec:  %s" % version)
     return schemadiff.get_schema_from_filespec(p4, version)
 
-def diff_branches(p4, cursor, filespec, frombranch, tobranch, dmlfile, validate):
+def diff_branches(p4, cursor, filespec, frombranch, tobranch, database, dmlfile, validate):
     """
     show the changes needed to turn the schema in frombranch to the one in tobranch.
     """
@@ -89,8 +89,17 @@ def diff_branches(p4, cursor, filespec, frombranch, tobranch, dmlfile, validate)
     frombranch = string.replace(frombranch, '-', '')
     tobranch = string.replace(tobranch, '-', '')
 
+    db1 = "%(branch)s_%(db)s" % { 
+        "branch" : frombranch,
+        "db" : database
+        }
+    db2 = "%(branch)s_%(db)s" % { 
+        "branch" : tobranch,
+        "db" : database
+        }
+
     schemadiff.diff_schemas(cursor, fromschema, toschema,
-                            frombranch, tobranch,
+                            db1, db2,
                             dmlfile=dmlfile,
                             validate=validate)
 
@@ -146,6 +155,7 @@ if __name__ == '__main__':
                       filespec,
                       oldbranch,
                       newbranch,
+                      database,
                       dmlfile,
                       validate)
 
