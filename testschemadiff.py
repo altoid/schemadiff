@@ -3,6 +3,7 @@
 import MySQLdb
 # docs at http://mysql-python.sourceforge.net/MySQLdb.html
 
+import logging
 import ast
 import sys
 import time
@@ -23,6 +24,7 @@ def apply_table_change(cursor, tableName, db1, db2):
     dmls = schemadiff.diff_table(
         cursor, tableName, db1, db2)
 
+    dmls.insert(0, "USE %s;" % db1)
     for dml in dmls:
         cursor.execute(dml)
 
@@ -32,37 +34,7 @@ def apply_table_change(cursor, tableName, db1, db2):
     return (cs1, cs2)
 
 
-class TestBasic(unittest.TestCase):
-
-    def test_normalize(self):
-        result = schemadiff.normalize('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789')
-        self.assertEqual('abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz0123456789', result)
-        result = schemadiff.shacmd(result)
-        self.assertEqual('106d564d4ccd3ce4dc111457baf36f99ba634d45', result)
-
-    def test_basic(self):
-        s = """CREATE TABLE `objectProductOverride` (
-  `objectId` bigint(20) NOT NULL,
-  `objectType` smallint(6) unsigned NOT NULL,
-  `productId` varchar(128) NOT NULL,
-  `partnerId` int(11) NOT NULL,
-  `updateDate` datetime NOT NULL,
-  `omit` char(1) NOT NULL,
-  `displayRank` int(11) DEFAULT NULL,
-  `description` text,
-  `title` varchar(128) DEFAULT NULL,
-  `imageUrl` varchar(255) DEFAULT NULL,
-  `author` varchar(128) DEFAULT NULL,
-  `objectProductOverrideId` bigint(20) NOT NULL,
-  `createDate` datetime NOT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8"""
-        self.assertEquals('6ab29987db01aeeecad2beedbc02774526194c54', schemadiff.shacmd(schemadiff.normalize(s)))
-
-
-class TestSetup(unittest.TestCase):
-
-    db1 = 'TestSetup_old'
-    db2 = 'TestSetup_new'
+class SchemaDiffTest(unittest.TestCase):
     dbconn = None
     cursor = None
 
@@ -75,14 +47,6 @@ class TestSetup(unittest.TestCase):
         self.cursor.execute("create database %(db)s" % { "db" : self.db1 })
         self.cursor.execute("create database %(db)s" % { "db" : self.db2 })
     
-    def testDbSetup(self):
-        # make sure the databases are there
-        conn1 = dsn.getConnection(self.db1)
-        conn2 = dsn.getConnection(self.db2)
-
-        conn2.close()
-        conn1.close()
-
     def tearDown(self):
         self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db1 })
         self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db2 })
@@ -96,27 +60,16 @@ class TestSetup(unittest.TestCase):
 
         self.cursor.close()
         self.dbconn.close()
-    
 
-class TestColumnDiffDML(unittest.TestCase):
+
+class TestColumnDiffDML(SchemaDiffTest):
     """
     test add/drop/change columns.  tests
     correctness of DML statement but does not execute it.
     """
     db1 = 'TestColumnDiffDML_old'
     db2 = 'TestColumnDiffDML_new'
-    dbconn = None
-    cursor = None
 
-    def setUp(self):
-        self.dbconn = dsn.getConnection()
-        self.cursor = self.dbconn.cursor()
-
-        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db1 })
-        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db2 })
-        self.cursor.execute("create database %(db)s" % { "db" : self.db1 })
-        self.cursor.execute("create database %(db)s" % { "db" : self.db2 })
-    
     def testNoDiffs(self):
         """test that two databases with the same table(s) have the same checksum.
         """
@@ -173,7 +126,7 @@ class TestColumnDiffDML(unittest.TestCase):
         dmls = schemadiff.diff_table(
             self.cursor, tableName, self.db1, self.db2)
         self.assertEqual(1, len(dmls))
-        control = "ALTER TABLE %(db)s.%(table)s DROP COLUMN objectId;" % {
+        control = "ALTER TABLE %(table)s DROP COLUMN objectId;" % {
             "db" : self.db1,
             "table" : tableName
             }
@@ -204,7 +157,7 @@ class TestColumnDiffDML(unittest.TestCase):
             self.cursor, tableName, self.db1, self.db2)
         self.assertEqual(1, len(dmls))
 
-        control = "ALTER TABLE %(db)s.%(table)s MODIFY COLUMN objectType smallint(6) NOT NULL;" % {
+        control = "ALTER TABLE %(table)s MODIFY COLUMN objectType smallint(6) NOT NULL;" % {
             "db" : self.db1,
             "table" : tableName
             }
@@ -235,7 +188,7 @@ class TestColumnDiffDML(unittest.TestCase):
             self.cursor, tableName, self.db1, self.db2)
         self.assertEqual(1, len(dmls))
 
-        control = "ALTER TABLE %(db)s.%(table)s MODIFY COLUMN objectType int(11);" % {
+        control = "ALTER TABLE %(table)s MODIFY COLUMN objectType int(11);" % {
             "db" : self.db1,
             "table" : tableName
             }
@@ -266,7 +219,7 @@ class TestColumnDiffDML(unittest.TestCase):
             self.cursor, tableName, self.db1, self.db2)
         self.assertEqual(1, len(dmls))
 
-        control = "ALTER TABLE %(db)s.%(table)s MODIFY COLUMN objectType int(11) NOT NULL;" % {
+        control = "ALTER TABLE %(table)s MODIFY COLUMN objectType int(11) NOT NULL;" % {
             "db" : self.db1,
             "table" : tableName
             }
@@ -296,7 +249,7 @@ class TestColumnDiffDML(unittest.TestCase):
             self.cursor, tableName, self.db1, self.db2)
         self.assertEqual(1, len(dmls))
 
-        control = "ALTER TABLE %(db)s.%(table)s ADD COLUMN objectId bigint(20) NOT NULL;" % {
+        control = "ALTER TABLE %(table)s ADD COLUMN objectId bigint(20) NOT NULL;" % {
             "db" : self.db1,
             "table" : tableName
             }
@@ -327,7 +280,7 @@ class TestColumnDiffDML(unittest.TestCase):
             self.cursor, tableName, self.db1, self.db2)
         self.assertEqual(1, len(dmls))
 
-        control = "ALTER TABLE %(db)s.%(table)s ADD COLUMN objectId bigint(20);" % {
+        control = "ALTER TABLE %(table)s ADD COLUMN objectId bigint(20);" % {
             "db" : self.db1,
             "table" : tableName
             }
@@ -361,14 +314,14 @@ class TestColumnDiffDML(unittest.TestCase):
             self.cursor, tableName, self.db1, self.db2)
         self.assertEqual(2, len(dmls))
 
-        control = ("ALTER TABLE %(db)s.%(table)s "
+        control = ("ALTER TABLE %(table)s "
                    "DROP COLUMN objectId;") % {
             "db" : self.db1,
             "table" : tableName
             }
         self.assertEqual(control, dmls[0])
 
-        control = ("ALTER TABLE %(db)s.%(table)s "
+        control = ("ALTER TABLE %(table)s "
                    "ADD COLUMN objectNamespaceAndId bigint(20) NOT NULL, "
                    "MODIFY COLUMN objectType smallint(6) unsigned NOT NULL;") % {
             "db" : self.db1,
@@ -376,15 +329,8 @@ class TestColumnDiffDML(unittest.TestCase):
             }
         self.assertEqual(control, dmls[1])
 
-    def tearDown(self):
-        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db1 })
-        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db2 })
-
-        self.cursor.close()
-        self.dbconn.close()
-
     
-class TestColumnDiff(unittest.TestCase):
+class TestColumnDiff(SchemaDiffTest):
     """
     these tests actually execute the alter table statement that is generated.
     columns only, no keys.
@@ -392,17 +338,6 @@ class TestColumnDiff(unittest.TestCase):
 
     db1 = 'TestColumnDiff_old'
     db2 = 'TestColumnDiff_new'
-    dbconn = None
-    cursor = None
-
-    def setUp(self):
-        self.dbconn = dsn.getConnection()
-        self.cursor = self.dbconn.cursor()
-
-        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db1 })
-        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db2 })
-        self.cursor.execute("create database %(db)s" % { "db" : self.db1 })
-        self.cursor.execute("create database %(db)s" % { "db" : self.db2 })
 
     def testAdd1Column(self):
         tableName = 'stupidTable'
@@ -424,6 +359,7 @@ class TestColumnDiff(unittest.TestCase):
                                         tableName,
                                         self.db1,
                                         self.db2)
+
         self.assertEqual(cs1, cs2)
 
     def testDrop1Column(self):
@@ -501,29 +437,12 @@ class TestColumnDiff(unittest.TestCase):
                                         self.db2)
         self.assertEqual(cs1, cs2)
 
-    def tearDown(self):
-        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db1 })
-        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db2 })
 
-        self.cursor.close()
-        self.dbconn.close()
-
-class TestIndexDiffDML(unittest.TestCase):
+class TestIndexDiffDML(SchemaDiffTest):
     # changing has to be done as drop-then-add
 
     db1 = 'TestIndexDiffDML_old'
     db2 = 'TestIndexDiffDML_new'
-    dbconn = None
-    cursor = None
-
-    def setUp(self):
-        self.dbconn = dsn.getConnection()
-        self.cursor = self.dbconn.cursor()
-
-        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db1 })
-        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db2 })
-        self.cursor.execute("create database %(db)s" % { "db" : self.db1 })
-        self.cursor.execute("create database %(db)s" % { "db" : self.db2 })
 
     def testDropIndex(self):
         """
@@ -556,7 +475,7 @@ class TestIndexDiffDML(unittest.TestCase):
             self.cursor, tableName, self.db1, self.db2)
         self.assertEqual(1, len(dmls))
 
-        control = ("ALTER TABLE %(db)s.%(table)s "
+        control = ("ALTER TABLE %(table)s "
                    "DROP INDEX key_drop;") % {
             "db" : self.db1,
             "table" : tableName }
@@ -592,7 +511,7 @@ class TestIndexDiffDML(unittest.TestCase):
         dmls = schemadiff.diff_table(
             self.cursor, tableName, self.db1, self.db2)
         self.assertEqual(1, len(dmls))
-        control = ("ALTER TABLE %(db)s.%(table)s "
+        control = ("ALTER TABLE %(table)s "
                    "ADD KEY key_add(column3);") % {
             "db" : self.db1,
             "table" : tableName }
@@ -630,14 +549,14 @@ class TestIndexDiffDML(unittest.TestCase):
             self.cursor, tableName, self.db1, self.db2)
         self.assertEqual(2, len(dmls))
 
-        control1 = ("ALTER TABLE %(db)s.%(table)s "
+        control1 = ("ALTER TABLE %(table)s "
                     "DROP INDEX key_add;"
                    ) % {
             "db" : self.db1,
             "table" : tableName }
         self.assertEqual(control1, dmls[0])
 
-        control2 = ("ALTER TABLE %(db)s.%(table)s "
+        control2 = ("ALTER TABLE %(table)s "
                    "ADD KEY key_add(column2,column3);"
                    ) % {
             "db" : self.db1,
@@ -675,7 +594,7 @@ class TestIndexDiffDML(unittest.TestCase):
         dmls = schemadiff.diff_table(
             self.cursor, tableName, self.db1, self.db2)
         self.assertEqual(1, len(dmls))
-        control = ("ALTER TABLE %(db)s.%(table)s "
+        control = ("ALTER TABLE %(table)s "
                    "DROP PRIMARY KEY;") % {
             "db" : self.db1,
             "table" : tableName }
@@ -708,7 +627,7 @@ class TestIndexDiffDML(unittest.TestCase):
         dmls = schemadiff.diff_table(
             self.cursor, tableName, self.db1, self.db2)
         self.assertEqual(1, len(dmls))
-        control = ("ALTER TABLE %(db)s.%(table)s "
+        control = ("ALTER TABLE %(table)s "
                    "ADD PRIMARY KEY(column1,column2);") % {
             "db" : self.db1,
             "table" : tableName }
@@ -743,45 +662,26 @@ class TestIndexDiffDML(unittest.TestCase):
             self.cursor, tableName, self.db1, self.db2)
         self.assertEqual(2, len(dmls))
 
-        control1 = ("ALTER TABLE %(db)s.%(table)s "
+        control1 = ("ALTER TABLE %(table)s "
                    "DROP PRIMARY KEY;"
                    ) % {
             "db" : self.db1,
             "table" : tableName }
         self.assertEqual(control1, dmls[0])
 
-        control2 = ("ALTER TABLE %(db)s.%(table)s "
+        control2 = ("ALTER TABLE %(table)s "
                     "ADD PRIMARY KEY(column1,column2);"
                    ) % {
             "db" : self.db1,
             "table" : tableName }
         self.assertEqual(control2, dmls[1])
 
-    def tearDown(self):
-        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db1 })
-        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db2 })
 
-        self.cursor.close()
-        self.dbconn.close()
-        pass
-
-
-class TestIndexDiff(unittest.TestCase):
+class TestIndexDiff(SchemaDiffTest):
     # changing has to be done as drop-then-add
 
     db1 = 'TestIndexDiff_old'
     db2 = 'TestIndexDiff_new'
-    dbconn = None
-    cursor = None
-
-    def setUp(self):
-        self.dbconn = dsn.getConnection()
-        self.cursor = self.dbconn.cursor()
-
-        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db1 })
-        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db2 })
-        self.cursor.execute("create database %(db)s" % { "db" : self.db1 })
-        self.cursor.execute("create database %(db)s" % { "db" : self.db2 })
 
     def testIndexDiff(self):
         """
@@ -815,6 +715,7 @@ class TestIndexDiff(unittest.TestCase):
                                         tableName,
                                         self.db1,
                                         self.db2)
+
         self.assertEqual(cs1, cs2)
 
     def testDropIndex(self):
@@ -984,32 +885,14 @@ class TestIndexDiff(unittest.TestCase):
                                         self.db2)
         self.assertEqual(cs1, cs2)
 
-    def tearDown(self):
-        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db1 })
-        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db2 })
 
-        self.cursor.close()
-        self.dbconn.close()
-
-
-class TestDrop(unittest.TestCase):
+class TestDrop(SchemaDiffTest):
     """
     test for good behavior when indexed columns are dropped.
     """
 
     db1 = 'TestDrop_old'
     db2 = 'TestDrop_new'
-    dbconn = None
-    cursor = None
-
-    def setUp(self):
-        self.dbconn = dsn.getConnection()
-        self.cursor = self.dbconn.cursor()
-
-        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db1 })
-        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db2 })
-        self.cursor.execute("create database %(db)s" % { "db" : self.db1 })
-        self.cursor.execute("create database %(db)s" % { "db" : self.db2 })
 
     def testPKColumn(self):
         """
@@ -1135,28 +1018,10 @@ class TestDrop(unittest.TestCase):
 
         self.assertEqual(cs1, cs2)
 
-    def tearDown(self):
-        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db1 })
-        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db2 })
 
-        self.cursor.close()
-        self.dbconn.close()
-
-
-class TestUniqueIndex(unittest.TestCase):
+class TestUniqueIndex(SchemaDiffTest):
     db1 = 'TestUniqueIndex_old'
     db2 = 'TestUniqueIndex_new'
-    dbconn = None
-    cursor = None
-
-    def setUp(self):
-        self.dbconn = dsn.getConnection()
-        self.cursor = self.dbconn.cursor()
-
-        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db1 })
-        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db2 })
-        self.cursor.execute("create database %(db)s" % { "db" : self.db1 })
-        self.cursor.execute("create database %(db)s" % { "db" : self.db2 })
 
     def testAddIndex(self):
         """
@@ -1366,27 +1231,10 @@ class TestUniqueIndex(unittest.TestCase):
                                         self.db2)
         self.assertEqual(cs1, cs2)
 
-    def tearDown(self):
-        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db1 })
-        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db2 })
 
-        self.cursor.close()
-        self.dbconn.close()
-
-class TestFKDiffDML(unittest.TestCase):
+class TestFKDiffDML(SchemaDiffTest):
     db1 = 'TestFKDiffDML_old'
     db2 = 'TestFKDiffDML_new'
-    dbconn = None
-    cursor = None
-
-    def setUp(self):
-        self.dbconn = dsn.getConnection()
-        self.cursor = self.dbconn.cursor()
-
-        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db1 })
-        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db2 })
-        self.cursor.execute("create database %(db)s" % { "db" : self.db1 })
-        self.cursor.execute("create database %(db)s" % { "db" : self.db2 })
 
     def testNoDiff(self):
         """
@@ -1457,14 +1305,14 @@ class TestFKDiffDML(unittest.TestCase):
             self.cursor, tableName, self.db1, self.db2)
         self.assertEqual(2, len(dmls))
 
-        control1 = ("ALTER TABLE %(db)s.%(table)s "
+        control1 = ("ALTER TABLE %(table)s "
                     "DROP FOREIGN KEY fk;"
                    ) % {
             "db" : self.db1,
             "table" : tableName }
         self.assertEqual(control1, dmls[0])
 
-        control2 = ("ALTER TABLE %(db)s.%(table)s "
+        control2 = ("ALTER TABLE %(table)s "
                     "ADD CONSTRAINT fk FOREIGN KEY (column1) REFERENCES reftable(column1);"
                    ) % {
             "db" : self.db1,
@@ -1509,7 +1357,7 @@ class TestFKDiffDML(unittest.TestCase):
             self.cursor, tableName, self.db1, self.db2)
         self.assertEqual(1, len(dmls))
 
-        control = ("ALTER TABLE %(db)s.%(table)s "
+        control = ("ALTER TABLE %(table)s "
                     "DROP FOREIGN KEY fk;"
                    ) % {
             "db" : self.db1,
@@ -1553,35 +1401,17 @@ class TestFKDiffDML(unittest.TestCase):
         dmls = schemadiff.diff_table(
             self.cursor, tableName, self.db1, self.db2)
         self.assertEqual(1, len(dmls))
-        control1 = ("ALTER TABLE %(db)s.%(table)s "
+        control1 = ("ALTER TABLE %(table)s "
                     "ADD CONSTRAINT fk FOREIGN KEY (column1,column2) REFERENCES reftable(column1,column2);"
                    ) % {
             "db" : self.db1,
             "table" : tableName }
         self.assertEqual(control1, dmls[0])
 
-    def tearDown(self):
-        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db1 })
-        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db2 })
 
-        self.cursor.close()
-        self.dbconn.close()
-        pass
-
-class TestFKDiff(unittest.TestCase):
+class TestFKDiff(SchemaDiffTest):
     db1 = 'TestFKDiff_old'
     db2 = 'TestFKDiff_new'
-    dbconn = None
-    cursor = None
-
-    def setUp(self):
-        self.dbconn = dsn.getConnection()
-        self.cursor = self.dbconn.cursor()
-
-        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db1 })
-        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db2 })
-        self.cursor.execute("create database %(db)s" % { "db" : self.db1 })
-        self.cursor.execute("create database %(db)s" % { "db" : self.db2 })
 
     def testChangeFK(self):
         """
@@ -1703,30 +1533,11 @@ class TestFKDiff(unittest.TestCase):
 
         self.assertEqual(cs1, cs2)
 
-    def tearDown(self):
-        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db1 })
-        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db2 })
 
-        self.cursor.close()
-        self.dbconn.close()
-        pass
-
-
-class TestMisc(unittest.TestCase):
+class TestMisc(SchemaDiffTest):
     db1 = 'TestMisc_old'
     db2 = 'TestMisc_new'
-    dbconn = None
-    cursor = None
 
-    def setUp(self):
-        self.dbconn = dsn.getConnection()
-        self.cursor = self.dbconn.cursor()
-
-        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db1 })
-        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db2 })
-        self.cursor.execute("create database %(db)s" % { "db" : self.db1 })
-        self.cursor.execute("create database %(db)s" % { "db" : self.db2 })
-    
     def test1(self):
         tableName = 'mytable'
 
@@ -1969,16 +1780,8 @@ class TestMisc(unittest.TestCase):
 
         self.assertEqual(cs1, cs2)
 
-    def tearDown(self):
-        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db1 })
-        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db2 })
 
-        self.cursor.close()
-        self.dbconn.close()
-        pass
-
-
-class TestEngine(unittest.TestCase):
+class TestEngine(SchemaDiffTest):
     """
     these tests actually execute the alter table statement that is generated.
     columns only, no keys.
@@ -1986,17 +1789,6 @@ class TestEngine(unittest.TestCase):
 
     db1 = 'TestEngine_old'
     db2 = 'TestEngine_new'
-    dbconn = None
-    cursor = None
-
-    def setUp(self):
-        self.dbconn = dsn.getConnection()
-        self.cursor = self.dbconn.cursor()
-
-        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db1 })
-        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db2 })
-        self.cursor.execute("create database %(db)s" % { "db" : self.db1 })
-        self.cursor.execute("create database %(db)s" % { "db" : self.db2 })
 
     def testChangeEngine(self):
         """
@@ -2064,15 +1856,54 @@ class TestEngine(unittest.TestCase):
 
         self.assertEqual(cs1, cs2)
 
-    def tearDown(self):
-        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db1 })
-        self.cursor.execute("drop database if exists %(db)s" % { "db" : self.db2 })
 
-        self.cursor.close()
-        self.dbconn.close()
+class TestDiffDatabases(SchemaDiffTest):
+    db1 = 'TestCreateTable_old'
+    db2 = 'TestCreateTable_new'
 
+#    def testAddTable(self):
+#        tableName = 'mytable'
+#
+#        s = """CREATE TABLE `%(table)s` (
+#  `author` varchar(128) DEFAULT NULL,
+#  `objectProductOverrideId` bigint(20) NOT NULL,
+#  `createDate` datetime NOT NULL
+#) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
+#
+#        self.cursor.execute("use %s" % self.db2)
+#        self.cursor.execute(s)
+#
+#        dmls = schemadiff.diff_databases(
+#            self.cursor, self.db1, self.db2)
+#        (cs1, cs2) = apply_table_change(self.cursor,
+#                                        tableName,
+#                                        self.db1,
+#                                        self.db2)
+#        self.assertEqual(cs1, cs2)
+#    
+#    def testDropTable(self):
+#        tableName = 'mytable'
+#
+#        s = """CREATE TABLE `%(table)s` (
+#  `author` varchar(128) DEFAULT NULL,
+#  `objectProductOverrideId` bigint(20) NOT NULL,
+#  `createDate` datetime NOT NULL
+#) ENGINE=InnoDB DEFAULT CHARSET=utf8""" % { "table" : tableName }
+#
+#        self.cursor.execute("use %s" % self.db1)
+#        self.cursor.execute(s)
+#
+#        dmls = schemadiff.diff_databases(
+#            self.cursor, self.db1, self.db2)
+#        (cs1, cs2) = apply_table_change(self.cursor,
+#                                        tableName,
+#                                        self.db1,
+#                                        self.db2)
+#        self.assertEqual(cs1, cs2)
     
 if __name__ == '__main__':
+    FORMAT = "%(asctime)-15s %(funcName)s %(levelname)s %(message)s"
+    logging.basicConfig(format=FORMAT, level=logging.DEBUG)
     filterwarnings('ignore', category = MySQLdb.Warning)
     unittest.main()
         

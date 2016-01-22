@@ -45,9 +45,6 @@ if __name__ == '__main__':
 
     try:
         schemadiff.log_in_to_p4(p4)
-        if p4 is None:
-            print "could not connect to perforce, quitting"
-            sys.exit(1)
 
         conn = dsn.getConnection()
         cursor = conn.cursor()

@@ -72,6 +72,7 @@ def get_schema_for_branch(p4, filespec, branch):
         "filespec" : filespec,
         "ts" : p4_ts }
 
+    logging.debug("filespec:  %s" % version)
     return schemadiff.get_schema_from_filespec(p4, version)
 
 def diff_branches(p4, cursor, filespec, frombranch, tobranch, dmlfile, validate):
@@ -91,7 +92,7 @@ def diff_branches(p4, cursor, filespec, frombranch, tobranch, dmlfile, validate)
     schemadiff.diff_schemas(cursor, fromschema, toschema,
                             frombranch, tobranch,
                             dmlfile=dmlfile,
-                            validate=True)
+                            validate=validate)
 
 if __name__ == '__main__':
     filterwarnings('ignore', category = MySQLdb.Warning)
@@ -136,9 +137,6 @@ if __name__ == '__main__':
 
     try:
         schemadiff.log_in_to_p4(p4)
-        if p4 is None:
-            print "could not connect to perforce, quitting"
-            sys.exit(1)
 
         conn = dsn.getConnection()
         cursor = conn.cursor()
@@ -159,8 +157,11 @@ if __name__ == '__main__':
         for e in p4.errors:
             logging.error(e)
 
+        raise
+
     except Exception as e:
         logging.error(e)
+        raise
     finally:
         p4.disconnect()
         if conn:

@@ -78,13 +78,14 @@ def normalize(s):
      sed 's/[[:space:]]*\([=,()]\)[[:space:]]*/\1/g' | \
      sed 's/,//g' | \
      sed "s/ comment='.*'//g" | \
-     sed "s/ comment '.*'//g" | \
-     sort
+     sed "s/ comment '.*'//g"
 """
     p2 = subprocess.check_output(filtercmd, stdin=p1.stdout, shell=True)
     p1.stdout.close()
-    p2 = re.sub(r'[^\w]', '', p2)
-    return p2
+    lines = p2.split('\n')
+    lines = [re.sub(r'[^\w]+', '', l) for l in lines]
+
+    return '\n'.join(lines)
 
 def shacmd(s):
     hash = hashlib.sha1()
@@ -93,7 +94,7 @@ def shacmd(s):
 
 def dbdump(dbname):
     try:
-        dumpcmd = "mysqldump -u %(user)s -p%(passwd)s --no-data %(dbname)s" % {
+        dumpcmd = "mysqldump -u %(user)s -p%(passwd)s --no-data --skip-add-drop-table %(dbname)s" % {
             "user" : dsn.user,
             "passwd" : dsn.passwd,
             "dbname" : dbname
@@ -103,14 +104,43 @@ def dbdump(dbname):
         with open(os.devnull, 'w') as devnull:
             return subprocess.check_output(dumpcmd, stderr=devnull, shell=True)
     except Exception as e:
-        print e
+        logging.error(e)
         raise
 
-def dbchecksum(dbname):
-    return shacmd(normalize(dbdump(dbname)))
-
 def schemachecksum(dbschema):
-    return shacmd(normalize(dbschema))
+    nized = normalize(dbschema)
+    lines = nized.split('\n')
+    sortedlines = sorted(lines)
+    return shacmd('\n'.join(sortedlines))
+
+def dbchecksum(dbname):
+    return schemachecksum(dbdump(dbname))
+
+def disgorge(dbname):
+    # write out the raw db schema
+    schema = dbdump(dbname)
+    f = open('%s.sql' % dbname, 'w')
+    f.write(schema)
+    f.close()
+
+    # write normalized schema
+    nized = normalize(schema)
+    f = open('%s.nml' % dbname, 'w')
+    f.write(nized)
+    f.close()
+
+    # normalized, then sorted
+    lines = nized.split('\n')
+    sortedlines = sorted(lines)
+    sortedlines = '\n'.join(sortedlines)
+    f = open('%s.srt' % dbname, 'w')
+    f.write(sortedlines)
+    f.close()
+
+    # checksum
+    f = open('%s.cs' % dbname, 'w')
+    f.write(shacmd(sortedlines))
+    f.close()
 
 def _format_dmls(table, db1, db2, clauses, prettyprint):
     dmls = []
@@ -118,14 +148,14 @@ def _format_dmls(table, db1, db2, clauses, prettyprint):
     if len(clauses) > 0:
         if (prettyprint):
             clauses_str = ',\n\t'.join(clauses)
-            dml = "ALTER TABLE %(db)s.%(table)s\n\t%(therest)s\n\t;" % {
+            dml = "ALTER TABLE %(table)s\n\t%(therest)s\n\t;" % {
                 "db" : db1,
                 "table" : table,
                 "therest" : clauses_str
                 }    
         else:
             clauses_str = ', '.join(clauses)
-            dml = "ALTER TABLE %(db)s.%(table)s %(therest)s;" % {
+            dml = "ALTER TABLE %(table)s %(therest)s;" % {
                 "db" : db1,
                 "table" : table,
                 "therest" : clauses_str
@@ -303,9 +333,6 @@ group by s.table_catalog, s.table_schema, s.table_name, s.index_name
 """
     q1 = query % { "db" : db1, "table" : table }
     q2 = query % { "db" : db2, "table" : table }
-
-#    print q1, ';'
-#    print q2, ';'
 
     select_columns = ['index_name', 'expr']
     indexdefs1 = {}
@@ -577,9 +604,11 @@ select engine
     clauses = []
 
     cursor.execute(q1)
+    engine1 = None
     for row in cursor.fetchall():
         engine1 = row[0]
 
+    engine2 = None
     cursor.execute(q2)
     for row in cursor.fetchall():
         engine2 = row[0]
@@ -590,7 +619,7 @@ select engine
     return clauses
 
 def diff_table(cursor, table, db1, db2, prettyprint=False):
-    logging.debug("diffing table %s" % table)
+#    logging.debug("diffing table %s" % table)
     (column_drop, column_add, column_modify) = diff_table_columns(cursor, table, db1, db2)
     (index_drop, index_add) = diff_table_indexes(cursor, table, db1, db2)
     (engines) = diff_table_engines(cursor, table, db1, db2)
@@ -626,22 +655,28 @@ def diff_databases(cursor, db1, db2):
         db2tables.add(d['table_name'])
 
     common = db1tables & db2tables
-    db1only = db1tables - db2tables
-    db2only = db2tables - db1tables
+    tables_to_drop = db1tables - db2tables
+    tables_to_add = db2tables - db1tables
 
     dmls = []
-    if len(db1only) > 0:
-        for dropme in db1only:
-            dmls.append("DROP TABLE %(db)s.%(table)s;" % {
+    for dropme in tables_to_drop:
+        dmls.append("DROP TABLE %(table)s;" % {
                 "db" : db1,
                 "table" : dropme })
 
-    if len(db2only) > 0:
-        for addme in db2only:
-            dmls.append("CREATE TABLE %(db1)s.%(table)s LIKE %(db2)s.%(table)s;" % {
-                "db1" : db1,
-                "db2" : db2,
-                "table" : addme })
+    for addme in tables_to_add:
+        replacevalues = {
+            "db1" : db1,
+            "db2" : db2,
+            "table" : addme }
+        cursor.execute("show create table %(db2)s.%(table)s;" % replacevalues)
+        for row in cursor.fetchall():
+            ctable = row[1]
+#            ctable = string.replace(ctable,
+#                                    """CREATE TABLE `%(table)s`""" % replacevalues,
+#                                    """CREATE TABLE `%(db1)s.%(table)s`""" % replacevalues,
+#                                    1)
+            dmls.append(ctable + ';')
 
     common_list = list(common)
     for c in common_list:
@@ -684,15 +719,18 @@ def diff_schemas(cursor, schema1, schema2, db1, db2, **kwargs):
     
     dmls = diff_databases(cursor, db1, db2)
 
+    dmls.insert(0, "USE %s;" % db1)
+
     dmlfile = kwargs['dmlfile']
     if dmlfile:
+        logging.debug("opening dml file %s" % dmlfile)
         dmlf = open(dmlfile, 'w')
 
     validate = kwargs['validate']
 
     for dml in dmls:
-        print dml
         if validate:
+            logging.debug("EXECUTING: %s" % dml)
             cursor.execute(dml)
         if dmlfile:
             dmlf.write(dml + "\n")
@@ -705,17 +743,11 @@ def diff_schemas(cursor, schema1, schema2, db1, db2, **kwargs):
         print "aftermath:"
         print "%s checksum:  %s" % (db1, dbchecksum(db1))
         print "%s checksum:  %s" % (db2, dbchecksum(db2))
-    
-        fh = open("%s.nml" % db1, 'w')
-        fh.write(normalize(dbdump(db1)))
-        fh.close()
-    
-        fh = open("%s.nml" % db2, 'w')
-        fh.write(normalize(dbdump(db2)))
-        fh.close()
+        disgorge(db1)
+        disgorge(db2)
 
-    cursor.execute("drop database %(db)s" % { "db" : db1 })
-    cursor.execute("drop database %(db)s" % { "db" : db2 })
+#    cursor.execute("drop database %(db)s" % { "db" : db1 })
+#    cursor.execute("drop database %(db)s" % { "db" : db2 })
 
 def log_in_to_p4(p4):
     try:
@@ -726,7 +758,10 @@ def log_in_to_p4(p4):
         p4.connect()
         tix = p4.run_tickets()
         if len(tix) > 0:
+            logging.debug("got p4 login ticket")
             return
+
+        logging.debug("couldn't get ticket, attempting user login")
 
         # we fall through to the code below and prompt for login
         # credentials.  this won't work if we have an existing
